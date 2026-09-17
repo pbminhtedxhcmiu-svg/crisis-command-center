@@ -54,8 +54,14 @@ fn run_migrations(app: &tauri::AppHandle, app_dir: &std::path::Path, db_url: &st
         let mut exit_code: Option<i32> = None;
         while let Some(event) = rx.recv().await {
             match event {
-                CommandEvent::Stdout(line) => log.push_str(&format!("{line}\n")),
-                CommandEvent::Stderr(line) => log.push_str(&format!("{line}\n")),
+                CommandEvent::Stdout(line) => {
+                    log.push_str(&String::from_utf8_lossy(&line));
+                    log.push('\n');
+                }
+                CommandEvent::Stderr(line) => {
+                    log.push_str(&String::from_utf8_lossy(&line));
+                    log.push('\n');
+                }
                 CommandEvent::Terminated(status) => exit_code = Some(status.code.unwrap_or(-1)),
                 _ => {}
             }
@@ -122,8 +128,8 @@ fn start_server(app: &tauri::AppHandle) -> Result<u16, String> {
         tauri::async_runtime::spawn(async move {
             while let Some(event) = rx.recv().await {
                 match event {
-                    CommandEvent::Stdout(line) => println!("[next] {line}"),
-                    CommandEvent::Stderr(line) => eprintln!("[next] {line}"),
+                    CommandEvent::Stdout(line) => println!("[next] {}", String::from_utf8_lossy(&line)),
+                    CommandEvent::Stderr(line) => eprintln!("[next] {}", String::from_utf8_lossy(&line)),
                     _ => {}
                 }
             }
