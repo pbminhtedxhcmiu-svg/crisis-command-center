@@ -68,14 +68,25 @@ const triple = (target.replace("--target=", "") ||
 const sidecarName = `node-${triple}${triple.includes("windows") ? ".exe" : ""}`;
 const sidecarDir = join(outDir, "node");
 mkdirSync(sidecarDir, { recursive: true });
+let sidecarSrc;
 if (existsSync(nodeExeWin)) {
-  copyFileSync(nodeExeWin, join(sidecarDir, sidecarName));
-  assertSameSize(nodeExeWin, join(sidecarDir, sidecarName));
+  sidecarSrc = nodeExeWin;
 } else if (existsSync(nodeBinUnix)) {
-  copyFileSync(nodeBinUnix, join(sidecarDir, sidecarName));
-  assertSameSize(nodeBinUnix, join(sidecarDir, sidecarName));
+  sidecarSrc = nodeBinUnix;
 } else {
   fail(`không tìm thấy node runtime trong ${nodeDir} (đặt DESKTOP_NODE_DIR để chỉ đường dẫn)`);
+}
+
+// Với universal-apple-darwin: build script của Tauri chạy RIÊNG cho từng arch và
+// bắt buộc có file node-<arch-triple> cho từng lần compile; CLI tự lipo thành
+// node-universal-apple-darwin khi bundle. Binary universal (fat) hợp lệ cho cả 2 arch.
+const sidecarTargets =
+  triple === "universal-apple-darwin"
+    ? ["node-x86_64-apple-darwin", "node-aarch64-apple-darwin", "node-universal-apple-darwin"]
+    : [sidecarName];
+for (const name of sidecarTargets) {
+  copyFileSync(sidecarSrc, join(sidecarDir, name));
+  assertSameSize(sidecarSrc, join(sidecarDir, name));
 }
 
 // 4. Prisma CLI closure: cài THẬT bằng npm vào thư mục riêng — npm tự resolve toàn bộ
