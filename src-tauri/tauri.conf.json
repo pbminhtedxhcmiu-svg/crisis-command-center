@@ -6,7 +6,6 @@
   "build": {
     "beforeDevCommand": "npm run desktop:prepare",
     "devUrl": "http://127.0.0.1:34561",
-    "beforeBuildCommand": "npm run desktop:prepare",
     "frontendDist": "./splash"
   },
   "app": {
