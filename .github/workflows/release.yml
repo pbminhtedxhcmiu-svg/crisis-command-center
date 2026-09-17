@@ -43,6 +43,11 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Prepare test database
+        run: |
+          npx prisma migrate deploy
+          node prisma/seed.mjs
+
       - name: Run tests (unit + integration)
         run: npm test
 
