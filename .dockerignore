@@ -2,8 +2,10 @@ node_modules
 .next
 .tools
 .freebuff
-.git
 tests
+src-tauri
+scripts
+.git
 *.db
 *.db-journal
 .env

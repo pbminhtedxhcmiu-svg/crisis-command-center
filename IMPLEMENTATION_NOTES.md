@@ -91,3 +91,13 @@ docker run -p 3000:3000 -v ccc-data:/app/data \
 - Phase 4: export report (PDF/CSV), so sánh nhiều event, timeline theo phút.
 - Phase 5: SSE/WebSocket, e2e Playwright, permission audit tự động, reconnect backoff.
 - Connector thật: implement cùng interface `start/pause/resume/stop` + ingest message → frontend không đổi.
+
+## 9. Ứng dụng Desktop (Tauri v2)
+
+Kiến trúc: shell Tauri (`src-tauri/`) khởi động **node sidecar** chạy Next standalone server trên `127.0.0.1:34561`, WebView mở `http://127.0.0.1:34561` sau khi TCP port sẵn sàng. SQLite nằm trong thư mục dữ liệu của app — hoàn toàn offline.
+
+- `scripts/prepare-desktop.mjs` — lắp runtime vào `src-tauri/binaries/`: `app/` (standalone + static + prisma/), `node/` (sidecar `node-<target-triple>`), `prisma-cli/` (cài thật bằng npm — closure đầy đủ cho `migrate deploy`).
+- `scripts/make-icons.mjs` — sinh icon png/ico/icns bằng sharp (không thêm dependency).
+- Cross-compile: build macOS Universal từ Windows qua `--target` + `DESKTOP_NODE_DIR` (CI làm sẵn).
+- Workflow `.github/workflows/desktop.yml`: matrix Windows (msi+nsis) + macOS universal (dmg) → đính installer vào Release khi push tag `v*`.
+- Build local cần Rust toolchain + MSVC Build Tools (Windows) / Xcode CLT (macOS): `npm run desktop:prepare && npm run desktop:build`.

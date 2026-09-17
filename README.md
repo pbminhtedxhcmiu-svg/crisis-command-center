@@ -33,6 +33,20 @@ docker run -p 3000:3000 -v ccc-data:/app/data \
 curl http://localhost:3000/api/health   # {"status":"ok",...}
 ```
 
+## Ứng dụng Desktop (Windows & macOS)
+
+Ứng dụng được đóng gói thành phần mềm desktop bằng **Tauri v2** — web app chạy bằng server Next.js nhúng (node sidecar đi kèm, không cần cài Node trên máy người dùng), SQLite nằm trong thư mục dữ liệu của app.
+
+Build local (cần Rust + MSVC Build Tools trên Windows, Xcode CLT trên macOS):
+
+```bash
+npm run build            # Next standalone bundle
+npm run desktop:prepare  # lắp runtime vào src-tauri/binaries/
+npm run desktop:build    # installer nằm ở src-tauri/target/release/bundle/
+```
+
+Cách nhanh nhất: chạy workflow **Desktop** từ tab Actions, hoặc push tag `v*` — installer `.msi`/`.exe` (Windows) và `.dmg` (macOS) sẽ tự đính kèm GitHub Release.
+
 ## Kiểm thử
 
 ```bash

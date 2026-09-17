@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <title>Crisis Command Center</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #0f2a43; color: #e8f1f8;
+      font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; }
+    .box { text-align: center; }
+    .logo { font-size: 56px; }
+    h1 { font-size: 22px; font-weight: 600; margin: 12px 0 6px; }
+    p { opacity: .75; font-size: 14px; margin: 0; }
+    .spin { width: 28px; height: 28px; margin: 18px auto 0; border: 3px solid rgba(232,241,248,.25);
+      border-top-color: #e8f1f8; border-radius: 50%; animation: s 1s linear infinite; }
+    @keyframes s { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <div class="logo">⛑</div>
+    <h1>Crisis Command Center</h1>
+    <p>Đang khởi động máy chủ nội bộ…</p>
+    <div class="spin"></div>
+  </div>
+</body>
+</html>

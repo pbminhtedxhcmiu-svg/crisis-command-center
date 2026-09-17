@@ -1,0 +1,131 @@
+name: Desktop
+
+# Build ứng dụng desktop (Tauri v2) cho Windows & macOS khi push tag v*
+# hoặc chạy thủ công. Sản phẩm: installer .msi/.nsis (Windows), .dmg/.app (macOS)
+# được đính kèm GitHub Release.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: "Nền tảng build thử"
+        required: false
+        default: "all"
+        type: choice
+        options: [all, windows, macos]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  desktop:
+    name: Desktop (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    if: github.event_name == 'push' || inputs.platform == 'all' || contains(inputs.platform, matrix.key)
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - key: windows
+            name: Windows x64 (MSI + NSIS)
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            bundles: msi,nsis
+            node-runtime: runtime-win
+          - key: macos
+            name: macOS Universal (DMG + APP)
+            os: macos-latest
+            target: universal-apple-darwin
+            bundles: dmg,app
+            node-runtime: runtime-mac
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Build Next standalone bundle
+        run: npm run build
+        env:
+          DATABASE_URL: file:./build-placeholder.db
+
+      # Node sidecar runtime cho nền tảng đích (desktop app khởi động Next server bằng nó)
+      - name: Download Node runtime (win)
+        if: matrix.node-runtime == 'runtime-win'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force .node-runtime | Out-Null
+          Invoke-WebRequest -Uri https://nodejs.org/dist/v22.14.0/node-v22.14.0-win-x64.zip -OutFile .node-runtime/node.zip
+          Expand-Archive .node-runtime/node.zip -DestinationPath .node-runtime
+          "DESKTOP_NODE_DIR=$((Resolve-Path .node-runtime/node-v22.14.0-win-x64).Path)" >> $env:GITHUB_ENV
+
+      - name: Download Node runtime (mac)
+        if: matrix.node-runtime == 'runtime-mac'
+        run: |
+          curl -fsSL https://nodejs.org/dist/v22.14.0/node-v22.14.0-darwin-arm64.tar.gz | tar -xz -C .
+          mv node-v22.14.0-darwin-arm64 .node-runtime
+          echo "DESKTOP_NODE_DIR=$PWD/.node-runtime" >> $GITHUB_ENV
+
+      # macOS Universal: node sidecar phải là binary universal — lipo ghép 2 kiến trúc cùng version
+      - name: Make universal node (mac)
+        if: matrix.node-runtime == 'runtime-mac'
+        run: |
+          mkdir -p .node-x64 && curl -fsSL https://nodejs.org/dist/v22.14.0/node-v22.14.0-darwin-x64.tar.gz | tar -xz -C .node-x64 --strip-components 1
+          mkdir -p .node-universal/bin
+          lipo -create .node-runtime/bin/node .node-x64/bin/node -output .node-universal/bin/node
+          lipo -info .node-universal/bin/node
+          echo "DESKTOP_NODE_DIR=$PWD/.node-universal" >> $GITHUB_ENV
+
+      - name: Prepare desktop runtime
+        run: node scripts/prepare-desktop.mjs --target=${{ matrix.target }}
+
+      - name: Build desktop app (Tauri)
+        run: npm run desktop:build -- --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+
+      - name: Collect artifacts
+        shell: bash
+        run: |
+          mkdir -p dist
+          find src-tauri/target -path "*/release/bundle/*" \( -name "*.msi" -o -name "*.exe" -o -name "*.dmg" \) -exec cp {} dist/ \; 2>/dev/null || true
+          ls -la dist/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.key }}
+          path: dist/*
+          retention-days: 7
+
+      - name: Attach to release (tag push only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" 2>/dev/null \
+            || gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --title "$TAG" --notes "Automated desktop release $TAG"
+          gh release upload "$TAG" dist/* --clobber --repo "$GITHUB_REPOSITORY"

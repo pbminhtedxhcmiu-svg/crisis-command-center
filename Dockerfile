@@ -34,11 +34,11 @@ RUN addgroup -S app && adduser -S app -G app
 COPY --from=builder --chown=app:app /app/.next/standalone ./
 COPY --from=builder --chown=app:app /app/.next/static ./.next/static
 COPY --from=builder --chown=app:app /app/prisma ./prisma
-COPY --from=builder --chown=app:app /app/node_modules/.prisma ./node_modules/.prisma
-# Prisma CLI + engine cho migrate deploy
-COPY --from=builder --chown=app:app /app/node_modules/prisma ./node_modules/prisma
-COPY --from=builder --chown=app:app /app/node_modules/@prisma ./node_modules/@prisma
-COPY --from=builder --chown=app:app /app/node_modules/.bin ./node_modules/.bin
+# Prisma là production dependency → npm ci --omit=dev tạo closure đầy đủ cho CLI
+# (không copy thủ công — tránh ERR_MODULE_NOT_FOUND do thiếu dep bắc cầu)
+# và generate đúng engine linux-musl cho image (client copy từ builder là bản Windows)
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev --no-audit --no-fund
 COPY --from=builder --chown=app:app /app/docker-entrypoint.sh ./docker-entrypoint.sh
 
 RUN chmod +x ./docker-entrypoint.sh

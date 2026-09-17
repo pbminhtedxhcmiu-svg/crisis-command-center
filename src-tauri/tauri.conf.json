@@ -1,0 +1,50 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Crisis Command Center",
+  "version": "1.0.0",
+  "identifier": "com.nova.crisis-command-center",
+  "build": {
+    "beforeDevCommand": "npm run desktop:prepare",
+    "devUrl": "http://127.0.0.1:34561",
+    "beforeBuildCommand": "npm run desktop:prepare",
+    "frontendDist": "./splash"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Crisis Command Center",
+        "width": 1440,
+        "height": 900,
+        "minWidth": 1100,
+        "minHeight": 680,
+        "visible": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["msi", "nsis", "dmg", "app"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico",
+      "icons/icon.png"
+    ],
+    "resources": {
+      "binaries/app/": "app/",
+      "binaries/prisma-cli/": "prisma-cli/"
+    },
+    "externalBin": ["binaries/node/node"],
+    "windows": {
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper"
+      }
+    }
+  },
+  "plugins": {}
+}
