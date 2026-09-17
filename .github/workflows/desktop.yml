@@ -29,12 +29,16 @@ jobs:
             name: Windows x64 (MSI + NSIS)
             os: windows-latest
             target: x86_64-pc-windows-msvc
+            rust-targets: x86_64-pc-windows-msvc
             bundles: msi,nsis
             node-runtime: runtime-win
           - key: macos
             name: macOS Universal (DMG + APP)
             os: macos-latest
             target: universal-apple-darwin
+            # universal-apple-darwin không phải std target — cài 2 target thật,
+            # tauri build tự ghép universal bằng lipo
+            rust-targets: x86_64-apple-darwin,aarch64-apple-darwin
             bundles: dmg,app
             node-runtime: runtime-mac
 
@@ -48,7 +52,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.target }}
+          targets: ${{ matrix.rust-targets }}
 
       - uses: swatinem/rust-cache@v2
         with:

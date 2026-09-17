@@ -3,6 +3,7 @@
 use std::net::TcpStream;
 use std::time::Duration;
 use tauri::Manager;
+use tauri_plugin_shell::process::CommandEvent;
 use tauri_plugin_shell::ShellExt;
 
 /// Cổng server nội bộ (có thể override bằng biến môi trường CCC_PORT).
@@ -26,7 +27,7 @@ fn run_migrations(app: &tauri::AppHandle, app_dir: &std::path::Path, db_url: &st
         .resource_dir()
         .map_err(|e| format!("không xác định được thư mục resource: {e}"))?;
 
-    let (mut rx, child) = app
+    let (mut rx, _child) = app
         .shell()
         .sidecar("binaries/node/node")
         .map_err(|e| format!("không tìm thấy sidecar node: {e}"))?
@@ -50,22 +51,23 @@ fn run_migrations(app: &tauri::AppHandle, app_dir: &std::path::Path, db_url: &st
 
     tauri::async_runtime::block_on(async move {
         let mut log = String::new();
+        let mut exit_code: Option<i32> = None;
         while let Some(event) = rx.recv().await {
             match event {
-                tauri_plugin_shell::ShellCommandEvent::Stdout(line) => log.push_str(&format!("{line}\n")),
-                tauri_plugin_shell::ShellCommandEvent::Stderr(line) => log.push_str(&format!("{line}\n")),
+                CommandEvent::Stdout(line) => log.push_str(&format!("{line}\n")),
+                CommandEvent::Stderr(line) => log.push_str(&format!("{line}\n")),
+                CommandEvent::Terminated(status) => exit_code = Some(status.code.unwrap_or(-1)),
                 _ => {}
             }
         }
-        let status = child
-            .wait()
-            .await
-            .map_err(|e| format!("lỗi chờ prisma migrate: {e}"))?;
-        if !status.success() {
-            return Err(format!("prisma migrate deploy thất bại:\n{log}"));
+        match exit_code {
+            Some(0) => {
+                println!("[ccc] migrate deploy OK");
+                Ok(())
+            }
+            Some(code) => Err(format!("prisma migrate deploy thất bại (exit {code}):\n{log}")),
+            None => Err(format!("prisma migrate kết thúc bất thường:\n{log}")),
         }
-        println!("[ccc] migrate deploy OK");
-        Ok(())
     })
 }
 
@@ -112,7 +114,7 @@ fn start_server(app: &tauri::AppHandle) -> Result<u16, String> {
         .spawn()
         .map_err(|e| format!("không khởi động được node sidecar: {e}"))?;
 
-    // Giữ process sống suốt vòng đời app
+    // Giữ process sống suốt vòng đời app (drop CommandChild sẽ kill process)
     std::mem::forget(child);
 
     // Ghi log server ra console của app (chỉ ở bản debug)
@@ -120,8 +122,8 @@ fn start_server(app: &tauri::AppHandle) -> Result<u16, String> {
         tauri::async_runtime::spawn(async move {
             while let Some(event) = rx.recv().await {
                 match event {
-                    tauri_plugin_shell::ShellCommandEvent::Stdout(line) => println!("[next] {line}"),
-                    tauri_plugin_shell::ShellCommandEvent::Stderr(line) => eprintln!("[next] {line}"),
+                    CommandEvent::Stdout(line) => println!("[next] {line}"),
+                    CommandEvent::Stderr(line) => eprintln!("[next] {line}"),
                     _ => {}
                 }
             }
