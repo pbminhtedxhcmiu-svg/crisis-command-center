@@ -1,0 +1,12 @@
+[api] unhandled: Error: Event chưa LIVE — hãy Start event trước
+    at s (C:\Users\Admin\Desktop\Crisis management\.next\server\chunks\244.js:1:8254)
+    at async B (C:\Users\Admin\Desktop\Crisis management\.next\server\app\api\live-events\[eventId]\simulator\route.js:1:2824)
+    at async k (C:\Users\Admin\Desktop\Crisis management\.next\server\app\api\live-events\[eventId]\simulator\route.js:1:5634)
+    at async g (C:\Users\Admin\Desktop\Crisis management\.next\server\app\api\live-events\[eventId]\simulator\route.js:1:6637)
+    at async H (C:\Users\Admin\Desktop\Crisis management\.next\server\app\api\live-events\[eventId]\simulator\route.js:1:7759)
+[api] unhandled: Error: Event chưa LIVE — hãy Start event trước
+    at s (C:\Users\Admin\Desktop\Crisis management\.next\server\chunks\244.js:1:8254)
+    at async B (C:\Users\Admin\Desktop\Crisis management\.next\server\app\api\live-events\[eventId]\simulator\route.js:1:2824)
+    at async k (C:\Users\Admin\Desktop\Crisis management\.next\server\app\api\live-events\[eventId]\simulator\route.js:1:5634)
+    at async g (C:\Users\Admin\Desktop\Crisis management\.next\server\app\api\live-events\[eventId]\simulator\route.js:1:6637)
+    at async H (C:\Users\Admin\Desktop\Crisis management\.next\server\app\api\live-events\[eventId]\simulator\route.js:1:7759)

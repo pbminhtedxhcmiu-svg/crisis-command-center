@@ -1,0 +1,15 @@
+node_modules
+.next
+.tools
+.freebuff
+.git
+tests
+*.db
+*.db-journal
+.env
+.env.*
+!.env.example
+*.md
+Dockerfile
+.dockerignore
+tsconfig.tsbuildinfo

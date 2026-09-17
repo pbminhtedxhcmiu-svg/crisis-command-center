@@ -1,0 +1,534 @@
+// Crisis Command Center — Prisma schema (SQLite)
+// NOTE: SQLite không có enum native → dùng String + Zod validation ở tầng lib.
+// ROLLBACK: xem prisma/migrations/<ts>_init/rollback.sql
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ============ AUTH ============
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String?
+  passwordHash String
+  isSystem     Boolean  @default(false)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  memberships         Membership[]
+  sessions            Session[]
+  authoredNotes       IncidentNote[]
+  authoredDrafts      ResponseDraft[]
+  ownedIncidents      Incident[] @relation("IncidentOwner")
+  incidentAssignments IncidentAssignment[]
+  auditLogs           AuditLog[]
+  notifications       Notification[]
+
+  @@map("users")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String   @map("user_id")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+// ============ TENANCY ============
+model Workspace {
+  id                  String               @id @default(cuid())
+  name                String
+  createdAt           DateTime             @default(now()) @map("created_at")
+
+  memberships        Membership[]
+  brands             Brand[]
+  campaigns          Campaign[]
+  liveEvents         LiveEvent[]
+  platformConnections PlatformConnection[]
+  playbooks          Playbook[]
+  policyRules        PolicyRule[]
+  responseTemplates  ResponseTemplate[]
+  incidents          Incident[]
+  responseDrafts     ResponseDraft[]
+  approvals          Approval[]
+  auditLogs          AuditLog[]
+  notifications      Notification[]
+  reports            Report[]
+
+  @@map("workspaces")
+}
+
+model Membership {
+  id          String   @id @default(cuid())
+  workspaceId String   @map("workspace_id")
+  userId      String   @map("user_id")
+  // WorkspaceRole: OWNER|CRISIS_LEAD|BRAND_MANAGER|PRODUCER|MODERATOR|CUSTOMER_SERVICE|LEGAL_REVIEWER|EXEC_VIEWER|ANALYST|AGENCY
+  role        String
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+  @@map("memberships")
+}
+
+model Brand {
+  id          String   @id @default(cuid())
+  workspaceId String   @map("workspace_id")
+  name        String
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  workspace  Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  campaigns  Campaign[]
+  liveEvents LiveEvent[]
+
+  @@index([workspaceId])
+  @@map("brands")
+}
+
+model Campaign {
+  id          String   @id @default(cuid())
+  workspaceId String   @map("workspace_id")
+  brandId     String   @map("brand_id")
+  name        String
+  objective   String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  workspace  Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brand      Brand       @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  liveEvents LiveEvent[]
+
+  @@index([workspaceId])
+  @@index([brandId])
+  @@map("campaigns")
+}
+
+// ============ LIVE EVENTS ============
+model LiveEvent {
+  id               String    @id @default(cuid())
+  workspaceId      String    @map("workspace_id")
+  brandId          String    @map("brand_id")
+  campaignId       String?   @map("campaign_id")
+  name             String
+  // EventStatus: DRAFT|READY|LIVE|ENDED|CANCELLED
+  status           String    @default("DRAFT")
+  // DataMode: DEMO|LIVE
+  dataMode         String    @default("DEMO") @map("data_mode")
+  scheduledAt      DateTime? @map("scheduled_at")
+  startedAt        DateTime? @map("started_at")
+  endedAt          DateTime? @map("ended_at")
+  platforms        String // JSON array: ["facebook","tiktok","shopee"]
+  products         String? // JSON array của {name, offer}
+  hostUserId       String?   @map("host_user_id")
+  producerUserId   String?   @map("producer_user_id")
+  playbookId       String?   @map("playbook_id")
+  riskKeywords     String    @default("[]") @map("risk_keywords") // JSON string[]
+  oncallUserIds    String    @default("[]") @map("oncall_user_ids") // JSON string[]
+  escalationUserId String?   @map("escalation_user_id")
+  // Simulator runtime
+  simState         String    @default("STOPPED") @map("sim_state") // STOPPED|RUNNING|PAUSED
+  simTick          Int       @default(0) @map("sim_tick")
+  simSeed          Int       @default(42) @map("sim_seed")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  workspace Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brand     Brand          @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  campaign  Campaign?      @relation(fields: [campaignId], references: [id])
+  playbook  Playbook?      @relation(fields: [playbookId], references: [id])
+  segments  StreamSegment[]
+  messages  Message[]
+  signals   Signal[]
+  alerts    Alert[]
+  incidents Incident[]
+  report    Report?
+
+  @@index([workspaceId, status])
+  @@index([brandId])
+  @@map("live_events")
+}
+
+model PlatformConnection {
+  id          String   @id @default(cuid())
+  workspaceId String   @map("workspace_id")
+  platform    String // facebook|tiktok|shopee|youtube
+  // CONNECTED|DISCONNECTED|DELAYED
+  status      String   @default("DISCONNECTED")
+  externalRef String?  @map("external_ref")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, platform])
+  @@map("platform_connections")
+}
+
+model StreamSegment {
+  id        String    @id @default(cuid())
+  eventId   String    @map("event_id")
+  name      String
+  startedAt DateTime  @default(now()) @map("started_at")
+  endedAt   DateTime?
+
+  event LiveEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+  @@map("stream_segments")
+}
+
+// ============ SIGNAL PIPELINE ============
+model Message {
+  id               String   @id @default(cuid())
+  eventId          String   @map("event_id")
+  externalId       String   @map("external_id")
+  platform         String
+  authorName       String   @map("author_name")
+  authorMasked     Boolean  @default(true) @map("author_masked")
+  rawText          String   @map("raw_text")
+  language         String   @default("vi")
+  engagement       String   @default("{}") // JSON {likes,replies,shares}
+  // MessageTopic: pricing|shipping|delivery|product_claim|spam|other|praise
+  topic            String   @default("other")
+  // RiskType: none|pricing|shipping|delivery|product_claim|spam|volume_spike
+  riskType         String   @default("none") @map("risk_type")
+  // Sentiment: negative|neutral|positive
+  sentiment        String   @default("neutral")
+  // ProcessingStatus: RAW|CLASSIFIED
+  processingStatus String   @default("CLASSIFIED") @map("processing_status")
+  signalId         String?  @map("signal_id")
+  dedupeKey        String?  @map("dedupe_key")
+  simTick          Int      @default(0) @map("sim_tick")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  event  LiveEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  signal Signal?   @relation(fields: [signalId], references: [id])
+
+  @@unique([eventId, externalId])
+  @@index([eventId, createdAt])
+  @@map("messages")
+}
+
+model Signal {
+  id             String   @id @default(cuid())
+  eventId        String   @map("event_id")
+  // MessageTopic
+  topic          String
+  // RiskType
+  riskType       String   @map("risk_type")
+  messageCount   Int      @default(1) @map("message_count")
+  velocity       Int      @default(0) // messages/phút
+  firstMessageAt DateTime @default(now()) @map("first_message_at")
+  lastMessageAt  DateTime @default(now()) @map("last_message_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  event    LiveEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  messages Message[]
+  alerts   Alert[]
+
+  @@index([eventId, topic])
+  @@index([eventId, lastMessageAt])
+  @@map("signals")
+}
+
+model Alert {
+  id             String    @id @default(cuid())
+  eventId        String    @map("event_id")
+  signalId       String?   @map("signal_id")
+  title          String
+  // Priority: P0|P1|P2|P3
+  priority       String    @default("P3")
+  // Severity = priority trong MVP (giữ 2 trường để mở rộng sau)
+  severity       String    @default("P3")
+  reason         String
+  evidenceCount  Int       @default(1) @map("evidence_count")
+  velocity       Int       @default(0)
+  policyMatch    String?   @map("policy_match")
+  // AlertStatus: OPEN|ACKNOWLEDGED|SNOOZED|CONVERTED|DISMISSED
+  status         String    @default("OPEN")
+  assigneeId     String?   @map("assignee_id")
+  acknowledgedAt DateTime? @map("acknowledged_at")
+  snoozedUntil   DateTime? @map("snoozed_until")
+  incidentId     String?   @map("incident_id")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  event    LiveEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  signal   Signal?   @relation(fields: [signalId], references: [id])
+  incident Incident? @relation(fields: [incidentId], references: [id])
+
+  @@index([eventId, status])
+  @@index([eventId, priority])
+  @@map("alerts")
+}
+
+// ============ INCIDENTS ============
+model Incident {
+  id             String    @id @default(cuid())
+  workspaceId    String    @map("workspace_id")
+  eventId        String    @map("event_id")
+  code           String // INC-XXXX
+  title          String
+  summary        String?
+  // IncidentStatus: OPEN|INVESTIGATING|RESPONSE_PENDING|RESPONDING|MONITORING|RESOLVED|CLOSED|REOPENED
+  status         String    @default("OPEN")
+  // Priority: P0|P1|P2|P3
+  severity       String    @default("P2")
+  ownerId        String?   @map("owner_id")
+  slaAckDueAt    DateTime? @map("sla_ack_due_at")
+  slaAckAt       DateTime? @map("sla_ack_at")
+  slaActionDueAt DateTime? @map("sla_action_due_at")
+  slaActionAt    DateTime? @map("sla_action_at")
+  resolvedAt     DateTime? @map("resolved_at")
+  resolution     String?
+  reopenedCount  Int       @default(0) @map("reopened_count")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  workspace   Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  event       LiveEvent            @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  owner       User?                @relation("IncidentOwner", fields: [ownerId], references: [id])
+  drafts      ResponseDraft[]
+  assignments IncidentAssignment[]
+  evidence    IncidentEvidence[]
+  notes       IncidentNote[]
+  timeline    IncidentTimeline[]
+  approvals   Approval[]
+  alerts      Alert[]
+
+  @@unique([workspaceId, code])
+  @@index([workspaceId, status])
+  @@index([eventId])
+  @@map("incidents")
+}
+
+model IncidentAssignment {
+  id         String   @id @default(cuid())
+  incidentId String   @map("incident_id")
+  userId     String   @map("user_id")
+  // owner|support|reviewer
+  role       String   @default("support")
+  assignedAt DateTime @default(now()) @map("assigned_at")
+
+  incident Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([incidentId, userId, role])
+  @@map("incident_assignments")
+}
+
+model IncidentEvidence {
+  id         String   @id @default(cuid())
+  incidentId String   @map("incident_id")
+  // alert|message|note|link|file
+  kind       String
+  refId      String?  @map("ref_id")
+  content    String
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  incident Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+
+  @@index([incidentId])
+  @@map("incident_evidence")
+}
+
+model IncidentNote {
+  id         String   @id @default(cuid())
+  incidentId String   @map("incident_id")
+  authorId   String   @map("author_id")
+  body       String
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  incident Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  author   User     @relation(fields: [authorId], references: [id])
+
+  @@index([incidentId])
+  @@map("incident_notes")
+}
+
+model IncidentTimeline {
+  id         String   @id @default(cuid())
+  incidentId String   @map("incident_id")
+  actorId    String?  @map("actor_id")
+  action     String
+  detail     String?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  incident Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+
+  @@index([incidentId])
+  @@map("incident_timeline")
+}
+
+// ============ RESPONSE STUDIO ============
+model Playbook {
+  id          String   @id @default(cuid())
+  workspaceId String   @map("workspace_id")
+  name        String
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  workspace  Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  liveEvents LiveEvent[]
+  templates  ResponseTemplate[]
+
+  @@map("playbooks")
+}
+
+model ResponseTemplate {
+  id             String   @id @default(cuid())
+  workspaceId    String   @map("workspace_id")
+  playbookId     String?  @map("playbook_id")
+  name           String
+  // ResponseKind: comment_reply|host_notice|internal_notice
+  kind           String   @default("comment_reply")
+  // Topic: pricing|shipping|delivery|product_claim|spam|other|praise
+  situationTopic String   @default("other") @map("situation_topic")
+  channel        String   @default("comment")
+  tone           String   @default("professional")
+  body           String
+  variables      String   @default("[]") // JSON string[]
+  bannedClaims   String   @default("[]") @map("banned_claims") // JSON string[]
+  // TemplateStatus: ACTIVE|INACTIVE
+  status         String   @default("ACTIVE")
+  version        Int      @default(1)
+  approverRole   String?  @map("approver_role")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  workspace Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  playbook  Playbook?       @relation(fields: [playbookId], references: [id])
+  drafts    ResponseDraft[]
+
+  @@index([workspaceId, situationTopic])
+  @@map("response_templates")
+}
+
+model ResponseDraft {
+  id           String   @id @default(cuid())
+  workspaceId  String   @map("workspace_id")
+  incidentId   String?  @map("incident_id")
+  templateId   String?  @map("template_id")
+  authorId     String   @map("author_id")
+  title        String
+  body         String
+  // ResponseKind
+  kind         String   @default("comment_reply")
+  // DraftStatus: DRAFT|PENDING_APPROVAL|APPROVED|REJECTED|USED|ARCHIVED
+  status       String   @default("DRAFT")
+  version      Int      @default(1)
+  requestKey   String?  @unique @map("request_key")
+  rejectReason String?  @map("reject_reason")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  workspace Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  incident  Incident?         @relation(fields: [incidentId], references: [id])
+  template  ResponseTemplate? @relation(fields: [templateId], references: [id])
+  author    User              @relation(fields: [authorId], references: [id])
+  approvals Approval[]
+
+  @@index([workspaceId, status])
+  @@index([incidentId])
+  @@map("response_drafts")
+}
+
+model Approval {
+  id           String    @id @default(cuid())
+  workspaceId  String    @map("workspace_id")
+  draftId      String    @map("draft_id")
+  incidentId   String?   @map("incident_id")
+  requesterId  String    @map("requester_id")
+  // PENDING|APPROVED|REJECTED
+  status       String    @default("PENDING")
+  decidedById  String?   @map("decided_by_id")
+  decisionNote String?   @map("decision_note")
+  decidedAt    DateTime? @map("decided_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  workspace Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  draft     ResponseDraft @relation(fields: [draftId], references: [id], onDelete: Cascade)
+  incident  Incident?     @relation(fields: [incidentId], references: [id])
+
+  @@index([workspaceId, status])
+  @@map("approvals")
+}
+
+// ============ POLICY & NOTIFICATION & AUDIT ============
+model PolicyRule {
+  id          String  @id @default(cuid())
+  workspaceId String  @map("workspace_id")
+  name        String
+  // RiskType
+  riskType    String
+  keywords    String  @default("[]") // JSON string[]
+  minVelocity Int     @default(3) @map("min_velocity")
+  priority    String  @default("P2")
+  enabled     Boolean @default(true)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@map("policy_rules")
+}
+
+model Notification {
+  id          String    @id @default(cuid())
+  workspaceId String    @map("workspace_id")
+  userId      String    @map("user_id")
+  title       String
+  body        String?
+  // incident_created|approval_requested|approval_decided|alert_assigned|event_status
+  type        String
+  refId       String?   @map("ref_id")
+  readAt      DateTime? @map("read_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+  @@map("notifications")
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  workspaceId String?  @map("workspace_id")
+  actorId     String?  @map("actor_id")
+  action      String
+  entityType  String   @map("entity_type")
+  entityId    String?  @map("entity_id")
+  detail      String? // JSON metadata (không bao giờ chứa secret)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  workspace Workspace? @relation(fields: [workspaceId], references: [id])
+  actor     User?      @relation(fields: [actorId], references: [id])
+
+  @@index([workspaceId, createdAt])
+  @@map("audit_logs")
+}
+
+model Report {
+  id          String   @id @default(cuid())
+  workspaceId String   @map("workspace_id")
+  eventId     String   @unique @map("event_id")
+  // JSON snapshot metrics
+  payload     String
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  event     LiveEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@map("reports")
+}
