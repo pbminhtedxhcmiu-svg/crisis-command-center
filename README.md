@@ -1,3 +1,5 @@
+[![Release CI](https://github.com/pbminhtedxhcmiu-svg/crisis-command-center/actions/workflows/release.yml/badge.svg)](https://github.com/pbminhtedxhcmiu-svg/crisis-command-center/actions/workflows/release.yml)
+
 # ⛑ Crisis Command Center v1.0.0
 
 Nền tảng giám sát & xử lý khủng hoảng cho livestream bán hàng — **hỗ trợ nhiều ngành hàng** (mỹ phẩm, thực phẩm, TPCN, thời trang, điện tử, gia dụng, mẹ & bé…).
@@ -39,6 +41,14 @@ npm test                 # 77 unit + 24 integration
 npm run lint
 node tests/api-smoke.mjs http://localhost:3000   # 46 assertions qua HTTP thật
 ```
+
+## Phát hành & CI
+
+Mỗi lần push tag `v*` (hoặc chạy tay từ tab Actions), workflow GitHub Actions sẽ tự động:
+
+1. **Kiểm thử toàn diện** — typecheck, lint, 101 unit + integration tests, build production, smoke test 46 assertions trên server thật
+2. **Build Docker image** — chạy container, seed DB, verify `/api/health` và smoke test ngay trong container
+3. **Đính artifact** — image nén `crisis-command-center-image.tar.gz` được tải lên GitHub Release của tag (`docker load < crisis-command-center-image.tar.gz` để dùng)
 
 ## Đa ngành hàng hoạt động thế nào?
 
