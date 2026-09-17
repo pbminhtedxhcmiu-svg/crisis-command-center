@@ -9,13 +9,6 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
-    inputs:
-      platform:
-        description: "Nền tảng build thử"
-        required: false
-        default: "all"
-        type: choice
-        options: [all, windows, macos]
 
 permissions:
   contents: write
@@ -28,7 +21,6 @@ jobs:
   desktop:
     name: Desktop (${{ matrix.name }})
     runs-on: ${{ matrix.os }}
-    if: github.event_name == 'push' || inputs.platform == 'all' || contains(inputs.platform, matrix.key)
     strategy:
       fail-fast: false
       matrix:
