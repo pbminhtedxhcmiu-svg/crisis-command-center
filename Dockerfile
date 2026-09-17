@@ -1,5 +1,7 @@
 # ---------- deps ----------
 FROM node:22-alpine AS deps
+# Prisma engine trên Alpine (musl) cần libc6-compat + openssl
+RUN apk add --no-cache libc6-compat openssl
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY prisma ./prisma
@@ -18,6 +20,8 @@ RUN npm run build
 
 # ---------- runner ----------
 FROM node:22-alpine AS runner
+# Engine của Prisma (query + schema) cần libssl/compat trên Alpine
+RUN apk add --no-cache libc6-compat openssl
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1

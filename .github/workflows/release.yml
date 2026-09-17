@@ -105,7 +105,11 @@ jobs:
             if curl -sf http://localhost:3100/api/health > /dev/null; then break; fi
             sleep 2
           done
-          curl -sf http://localhost:3100/api/health
+          if ! curl -sf http://localhost:3100/api/health; then
+            echo "--- container logs ---"
+            docker logs ccc-smoke
+            exit 1
+          fi
           docker exec ccc-smoke npx --no-install prisma db seed
           node tests/api-smoke.mjs http://localhost:3100
           docker rm -f ccc-smoke
