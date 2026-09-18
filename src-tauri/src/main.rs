@@ -20,6 +20,23 @@ fn sqlite_url(path: &std::path::Path) -> String {
     format!("file:{s}")
 }
 
+/// Tạo lệnh chạy node runtime.
+/// - Bản cài đặt: bundler đặt sidecar PHẲNG cạnh main exe (node.exe / node)
+/// - Quy ước dev (`tauri dev`): binaries/node/node-<target-triple>
+fn node_command(app: &tauri::AppHandle) -> Result<tauri_plugin_shell::process::Command, String> {
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            let flat = dir.join(if cfg!(windows) { "node.exe" } else { "node" });
+            if flat.exists() {
+                return Ok(app.shell().command(flat));
+            }
+        }
+    }
+    app.shell()
+        .sidecar("binaries/node/node")
+        .map_err(|e| format!("không tìm thấy node runtime: {e}"))
+}
+
 /// Chạy `prisma migrate deploy` bằng prisma-cli bundle trước khi mở server.
 fn run_migrations(app: &tauri::AppHandle, app_dir: &std::path::Path, db_url: &str) -> Result<(), String> {
     let resource_dir = app
@@ -27,10 +44,7 @@ fn run_migrations(app: &tauri::AppHandle, app_dir: &std::path::Path, db_url: &st
         .resource_dir()
         .map_err(|e| format!("không xác định được thư mục resource: {e}"))?;
 
-    let (mut rx, _child) = app
-        .shell()
-        .sidecar("binaries/node/node")
-        .map_err(|e| format!("không tìm thấy sidecar node: {e}"))?
+    let (mut rx, _child) = node_command(app)?
         .args([
             resource_dir
                 .join("prisma-cli")
@@ -106,11 +120,7 @@ fn start_server(app: &tauri::AppHandle) -> Result<u16, String> {
 
     // 2. Chạy Next standalone server
     let port = server_port();
-    // sidecar("binaries/node/node") tự resolve node-<target-triple><.exe> theo externalBin
-    let (mut rx, child) = app
-        .shell()
-        .sidecar("binaries/node/node")
-        .map_err(|e| format!("không tìm thấy sidecar node: {e}"))?
+    let (mut rx, child) = node_command(app)?
         .args(["server.js"])
         .current_dir(&app_dir)
         .env("PORT", port.to_string())
