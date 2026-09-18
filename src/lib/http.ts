@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { ZodError, type ZodType } from "zod";
+import { ZodError, type ZodType, type ZodTypeDef, type TypeOf } from "zod";
 import { ApiError, validationError } from "@/lib/errors";
 
 // Chuẩn response/error thống nhất mọi route
@@ -27,7 +27,10 @@ export function fail(error: unknown) {
   );
 }
 
-export function parseBody<T>(schema: ZodType<T>, body: unknown): T {
+export function parseBody<S extends ZodType<unknown, ZodTypeDef, unknown>>(
+  schema: S,
+  body: unknown,
+): TypeOf<S> {
   try {
     return schema.parse(body);
   } catch (e) {

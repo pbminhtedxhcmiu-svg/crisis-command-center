@@ -3,8 +3,29 @@ import { prisma } from "@/lib/db";
 import { requirePermission } from "@/lib/auth";
 import { ok, fail, parseBody } from "@/lib/http";
 import { audit } from "@/lib/audit";
-import { PRODUCT_CATEGORIES } from "@/lib/constants";
+import { PRODUCT_CATEGORIES, PLATFORMS } from "@/lib/constants";
 import { conflict, notFound } from "@/lib/errors";
+
+/** Schema URL linkstream: bắt buộc http(s), giới hạn độ dài hợp lý. */
+const streamUrlSchema = z
+  .string()
+  .max(2048)
+  .url()
+  .refine((v) => /^https?:\/\//i.test(v), "URL phải là http/https")
+  .optional()
+  .or(z.literal(""));
+
+/** streamUrls: map platform hợp lệ → URL (chuỗi rỗng = bỏ). */
+const streamUrlsSchema = z
+  .record(z.enum(PLATFORMS), streamUrlSchema)
+  .optional()
+  .transform((v) =>
+    v
+      ? Object.fromEntries(
+          Object.entries(v).filter(([, url]) => typeof url === "string" && url.trim() !== ""),
+        )
+      : undefined,
+  );
 
 const createSchema = z.object({
   name: z.string().min(3).max(120),
@@ -12,6 +33,7 @@ const createSchema = z.object({
   campaignId: z.string().nullish(),
   scheduledAt: z.string().datetime().nullish(),
   platforms: z.array(z.string()).min(1).max(4),
+  streamUrls: streamUrlsSchema,
   products: z
     .array(
       z.object({
@@ -33,6 +55,7 @@ const createSchema = z.object({
 
 function serialize(e: {
   platforms: string;
+  streamUrls: string;
   products: string | null;
   riskKeywords: string;
   oncallUserIds: string;
@@ -41,6 +64,7 @@ function serialize(e: {
   return {
     ...e,
     platforms: JSON.parse(e.platforms) as string[],
+    streamUrls: JSON.parse(e.streamUrls) as Record<string, string>,
     products: e.products ? JSON.parse(e.products) : [],
     riskKeywords: JSON.parse(e.riskKeywords) as string[],
     oncallUserIds: JSON.parse(e.oncallUserIds) as string[],
@@ -99,6 +123,11 @@ export async function POST(req: Request) {
       const campaign = await prisma.campaign.findUnique({ where: { id: input.campaignId } });
       if (!campaign || campaign.workspaceId !== workspaceId) throw conflict("Campaign không thuộc workspace");
     }
+    // streamUrls chỉ hợp lệ cho nền tảng đã chọn của event
+    if (input.streamUrls) {
+      const unknown = Object.keys(input.streamUrls).filter((p) => !input.platforms.includes(p));
+      if (unknown.length > 0) throw conflict(`streamUrls chứa nền tảng không thuộc event: ${unknown.join(", ")}`);
+    }
     const event = await prisma.liveEvent.create({
       data: {
         workspaceId,
@@ -109,6 +138,7 @@ export async function POST(req: Request) {
         dataMode: input.dataMode,
         scheduledAt: input.scheduledAt ? new Date(input.scheduledAt) : null,
         platforms: JSON.stringify(input.platforms),
+        streamUrls: JSON.stringify(input.streamUrls ?? {}),
         products: input.products ? JSON.stringify(input.products) : null,
         playbookId: input.playbookId ?? null,
         riskKeywords: JSON.stringify(input.riskKeywords ?? []),

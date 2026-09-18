@@ -35,6 +35,12 @@ export default async function EventDetailPage({
 
   const platforms = JSON.parse(event.platforms) as string[];
   const riskKeywords = JSON.parse(event.riskKeywords) as string[];
+  let streamUrls: Record<string, string> = {};
+  try {
+    streamUrls = JSON.parse(event.streamUrls ?? "{}") as Record<string, string>;
+  } catch {
+    streamUrls = {};
+  }
   let products: { name: string; offer?: string }[] = [];
   try {
     products = JSON.parse(event.products ?? "[]") as { name: string; offer?: string }[];
@@ -100,6 +106,29 @@ export default async function EventDetailPage({
           <p className="text-dim text-[13px] mt-3">
             🛍 Sản phẩm / offer: {products.map((p) => p.name + (p.offer ? ` — ${p.offer}` : "")).join(" · ")}
           </p>
+        )}
+
+        {platforms.some((p) => streamUrls[p]) && (
+          <div className="mt-3">
+            <div className="text-faint text-[10.5px] font-semibold mb-2">LINKSTREAM</div>
+            <div className="flex gap-2 flex-wrap">
+              {platforms
+                .filter((p) => streamUrls[p])
+                .map((p) => (
+                  <a
+                    key={p}
+                    href={streamUrls[p]}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn btn-ghost text-[12px]"
+                    title={streamUrls[p]}
+                  >
+                    <span className={`platform-dot pf-${p}`} style={{ width: 8, height: 8 }} />
+                    Mở {p} ↗
+                  </a>
+                ))}
+            </div>
+          </div>
         )}
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">

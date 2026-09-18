@@ -54,6 +54,8 @@ export default function NewEventForm({
     { name: "", offer: "", category: "other" },
   ]);
   const [platforms, setPlatforms] = useState<string[]>(["facebook"]);
+  // Linkstream: URL phát trực tiếp cho từng nền tảng (kiểm soát xem/tối/NĐT)
+  const [streamUrls, setStreamUrls] = useState<Record<string, string>>({});
   const [riskKeywords, setRiskKeywords] = useState("giao hàng chậm, hàng giả, hoàn tiền");
   const [playbookId, setPlaybookId] = useState<string | null>(playbooks[0]?.id ?? null);
   const [busy, setBusy] = useState(false);
@@ -74,6 +76,10 @@ export default function NewEventForm({
     .filter((p) => p.name.length > 0);
 
   const canNext = step === 0 ? name.trim().length >= 3 && !!brandId : platforms.length > 0;
+
+  function updateStreamUrl(platform: string, url: string) {
+    setStreamUrls((prev) => ({ ...prev, [platform]: url }));
+  }
 
   function updateProduct(idx: number, patch: Partial<{ name: string; offer: string; category: string }>) {
     setProducts((prev) => prev.map((p, i) => (i === idx ? { ...p, ...patch } : p)));
@@ -98,6 +104,9 @@ export default function NewEventForm({
           campaignId: campaignId || null,
           scheduledAt: scheduledAt ? new Date(scheduledAt).toISOString() : null,
           platforms,
+          streamUrls: Object.fromEntries(
+            Object.entries(streamUrls).filter(([, u]) => u.trim() !== ""),
+          ),
           products: cleanProducts.length > 0 ? cleanProducts : null,
           playbookId: playbookId || null,
           riskKeywords: keywords,
@@ -260,6 +269,26 @@ export default function NewEventForm({
                 })}
               </div>
             </div>
+            {platforms.length > 0 && (
+              <div className="field">
+                <span className="label">Linkstream (URL phát cho từng nền tảng)</span>
+                <div className="space-y-2">
+                  {platforms.map((pf) => (
+                    <div key={pf} className="flex gap-2 items-center">
+                      <span className={`platform-dot ${PLATFORM_META[pf]?.cls ?? ""}`} style={{ width: 8, height: 8 }} />
+                      <span className="text-[12.5px] w-24 shrink-0 text-dim">{PLATFORM_META[pf]?.label ?? pf}</span>
+                      <input
+                        className="input flex-1"
+                        value={streamUrls[pf] ?? ""}
+                        onChange={(e) => updateStreamUrl(pf, e.target.value)}
+                        placeholder={`https://${pf === "shopee" ? "live.shopee.vn/..." : pf + ".com/..."} (tuỳ chọn)`}
+                      />
+                    </div>
+                  ))}
+                </div>
+                <p className="text-faint text-[11.5px] mt-1.5">Tuỳ chọn — dán link stream để đội giám sát mở trực tiếp. Có thể thêm/sửa sau ở trang chi tiết event.</p>
+              </div>
+            )}
             <label className="field">
               <span className="label">Risk keywords (phân tách bằng dấu phẩy)</span>
               <input className="input" value={riskKeywords} onChange={(e) => setRiskKeywords(e.target.value)} placeholder="giao hàng chậm, hàng giả, hoàn tiền..." />
@@ -302,6 +331,13 @@ export default function NewEventForm({
             <Row label="Campaign" value={campaigns.find((c) => c.id === campaignId)?.name ?? "—"} />
             <Row label="Thời gian" value={scheduledAt ? new Date(scheduledAt).toLocaleString("vi-VN") : "—"} />
             <Row label="Nền tảng" value={platforms.join(", ")} />
+            <Row
+              label="Linkstream"
+              value={Object.entries(streamUrls)
+                .filter(([, u]) => u.trim() !== "")
+                .map(([p, u]) => `${p}: ${u}`)
+                .join(" · ") || "—"}
+            />
             <Row label="Sản phẩm" value={cleanProducts.map((p) => `${p.name} (${CATEGORY_OPTIONS.find((c) => c.value === p.category)?.label ?? p.category})`).join(", ")} />
             <Row label="Risk keywords" value={keywords.join(", ") || "—"} />
             <Row label="Playbook" value={playbooks.find((p) => p.id === playbookId)?.name ?? "—"} />

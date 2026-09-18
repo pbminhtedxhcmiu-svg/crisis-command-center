@@ -3,9 +3,30 @@ import { prisma } from "@/lib/db";
 import { requirePermission } from "@/lib/auth";
 import { ok, fail, parseBody } from "@/lib/http";
 import { audit } from "@/lib/audit";
-import { notFound } from "@/lib/errors";
+import { notFound, conflict } from "@/lib/errors";
+import { PLATFORMS } from "@/lib/constants";
 
 type Params = { params: Promise<{ eventId: string }> };
+
+/** Schema URL linkstream: bắt buộc http(s), giới hạn độ dài hợp lý. */
+const streamUrlSchema = z
+  .string()
+  .max(2048)
+  .url()
+  .refine((v) => /^https?:\/\//i.test(v), "URL phải là http/https")
+  .optional()
+  .or(z.literal(""));
+
+const streamUrlsSchema = z
+  .record(z.enum(PLATFORMS), streamUrlSchema)
+  .optional()
+  .transform((v) =>
+    v
+      ? Object.fromEntries(
+          Object.entries(v).filter(([, url]) => typeof url === "string" && url.trim() !== ""),
+        )
+      : undefined,
+  );
 
 export async function GET(_req: Request, { params }: Params) {
   try {
@@ -36,6 +57,7 @@ export async function GET(_req: Request, { params }: Params) {
       event: {
         ...event,
         platforms: JSON.parse(event.platforms),
+        streamUrls: JSON.parse(event.streamUrls) as Record<string, string>,
         products: event.products ? JSON.parse(event.products) : [],
         riskKeywords: keywords,
         oncallUserIds: oncall,
@@ -51,6 +73,7 @@ const patchSchema = z.object({
   name: z.string().min(3).max(120).optional(),
   scheduledAt: z.string().datetime().nullish(),
   platforms: z.array(z.string()).min(1).max(4).optional(),
+  streamUrls: streamUrlsSchema,
   products: z.array(z.object({ name: z.string(), offer: z.string().optional(), category: z.string().optional() })).optional(),
   riskKeywords: z.array(z.string()).optional(),
   hostUserId: z.string().nullish(),
@@ -73,6 +96,13 @@ export async function PATCH(req: Request, { params }: Params) {
     if (input.name !== undefined) data.name = input.name;
     if (input.scheduledAt !== undefined) data.scheduledAt = input.scheduledAt ? new Date(input.scheduledAt) : null;
     if (input.platforms !== undefined) data.platforms = JSON.stringify(input.platforms);
+    if (input.streamUrls !== undefined) {
+      // streamUrls chỉ hợp lệ cho nền tảng của event (sau khi áp platforms mới nếu có)
+      const effectivePlatforms = input.platforms ?? (JSON.parse(existing.platforms) as string[]);
+      const unknown = Object.keys(input.streamUrls).filter((p) => !effectivePlatforms.includes(p));
+      if (unknown.length > 0) throw conflict(`streamUrls chứa nền tảng không thuộc event: ${unknown.join(", ")}`);
+      data.streamUrls = JSON.stringify(input.streamUrls);
+    }
     if (input.products !== undefined) data.products = JSON.stringify(input.products);
     if (input.riskKeywords !== undefined) data.riskKeywords = JSON.stringify(input.riskKeywords);
     if (input.hostUserId !== undefined) data.hostUserId = input.hostUserId;
@@ -94,6 +124,7 @@ export async function PATCH(req: Request, { params }: Params) {
     return ok({
       ...event,
       platforms: JSON.parse(event.platforms),
+      streamUrls: JSON.parse(event.streamUrls) as Record<string, string>,
       products: event.products ? JSON.parse(event.products) : [],
       riskKeywords: JSON.parse(event.riskKeywords),
       oncallUserIds: JSON.parse(event.oncallUserIds),

@@ -132,6 +132,7 @@ model LiveEvent {
   startedAt        DateTime? @map("started_at")
   endedAt          DateTime? @map("ended_at")
   platforms        String // JSON array: ["facebook","tiktok","shopee"]
+  streamUrls       String  @default("{}") @map("stream_urls") // JSON map platform→URL linkstream
   products         String? // JSON array của {name, offer}
   hostUserId       String?   @map("host_user_id")
   producerUserId   String?   @map("producer_user_id")
