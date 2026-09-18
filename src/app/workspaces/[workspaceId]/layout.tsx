@@ -42,10 +42,11 @@ export default async function WorkspaceLayout({
         <div className="px-2 pt-1 pb-5">
           <div className="flex items-center gap-2 mb-4">
             <div
-              className="w-8 h-8 rounded-[10px] grid place-items-center text-[15px]"
-              style={{ background: "var(--gradient-brand)", color: "#06121f" }}
+              className="w-8 h-8 rounded-[10px] grid place-items-center"
+              style={{ background: "var(--gradient-brand)" }}
             >
-              ⛑
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo.png" alt="LiveGuard" className="w-[22px] h-[22px]" />
             </div>
             <div className="min-w-0">
               <div className="text-[13px] font-bold truncate">{ws.name}</div>

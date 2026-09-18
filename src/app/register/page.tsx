@@ -38,10 +38,11 @@ export default function RegisterPage() {
       <div className="w-full max-w-[400px]">
         <div className="text-center mb-6">
           <div
-            className="w-12 h-12 mx-auto mb-3 rounded-2xl grid place-items-center text-[22px]"
-            style={{ background: "var(--gradient-brand)", color: "#06121f" }}
+            className="w-12 h-12 mx-auto mb-3 rounded-2xl grid place-items-center"
+            style={{ background: "var(--gradient-brand)" }}
           >
-            ⛑
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="LiveGuard" className="w-8 h-8" />
           </div>
           <h1 className="text-lg font-bold tracking-tight">Tạo tài khoản</h1>
           <p className="text-dim text-[12.5px] mt-1">Bạn sẽ là OWNER của workspace mới</p>
