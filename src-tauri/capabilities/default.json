@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "Quyền mặc định cho cửa sổ chính (server chạy từ Rust, frontend không cần shell API)",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "permissions": ["core:default", "updater:default"]
 }

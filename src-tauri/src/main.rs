@@ -158,9 +158,47 @@ fn start_server(app: &tauri::AppHandle) -> Result<u16, String> {
     Err(format!("server không mở cổng {port} sau 40 giây"))
 }
 
+/// Kiểm tra bản cập nhật qua plugin updater (endpoint latest.json trên GitHub Releases).
+/// Tải về và cài passive (không cần admin trên NSIS per-user), rồi yêu cầu restart.
+fn check_for_updates(handle: tauri::AppHandle) {
+    use tauri_plugin_updater::UpdaterExt;
+    let result = tauri::async_runtime::block_on(async move {
+        match handle.updater() {
+            Ok(updater) => match updater.check().await {
+                Ok(Some(update)) => {
+                    println!("[ccc] có bản mới {} — đang tải & cài...", update.version);
+                    let mut downloaded = 0u64;
+                    match update
+                        .download_and_install(
+                            |chunk, total| {
+                                downloaded += chunk as u64;
+                                if total > 0 && downloaded % (8 * 1024 * 1024) < chunk as u64 {
+                                    println!("[ccc] update... {} / {} MB", downloaded / 1024 / 1024, total / 1024 / 1024);
+                                }
+                            },
+                            || {
+                                println!("[ccc] tải xong — cài đặt...");
+                            },
+                        )
+                        .await
+                    {
+                        Ok(()) => println!("[ccc] update đã cài — sẽ áp dụng khi khởi động lại"),
+                        Err(e) => eprintln!("[ccc] cài update thất bại: {e}"),
+                    }
+                }
+                Ok(None) => println!("[ccc] đã là bản mới nhất"),
+                Err(e) => eprintln!("[ccc] kiểm tra update thất bại: {e}"),
+            },
+            Err(e) => eprintln!("[ccc] updater không khả dụng: {e}"),
+        }
+    });
+    let _ = result;
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let handle = app.handle().clone();
             tauri::async_runtime::spawn_blocking(move || {
@@ -173,6 +211,9 @@ fn main() {
                             let _ = window.show();
                             let _ = window.set_focus();
                         }
+                        // Auto-update: kiểm tra nền sau khi app đã dùng được, im lặng khi lỗi mạng
+                        // (đang trong spawn_blocking — không chặn UI, download/cài passive)
+                        check_for_updates(handle);
                     }
                     Err(e) => {
                         eprintln!("[ccc] {e}");

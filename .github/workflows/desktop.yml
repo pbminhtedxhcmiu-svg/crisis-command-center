@@ -101,12 +101,19 @@ jobs:
 
       - name: Build desktop app (Tauri)
         run: npm run desktop:build -- --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+        env:
+          # Ký gói cập nhật (updater) — secret đã set qua `gh secret set`
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
       - name: Collect artifacts
         shell: bash
         run: |
           mkdir -p dist
           find src-tauri/target -path "*/release/bundle/*" \( -name "*.msi" -o -name "*.exe" -o -name "*.dmg" \) -exec cp {} dist/ \; 2>/dev/null || true
+          # Bản cập nhật có chữ ký cho auto-updater (NSIS trên Win, .app.tar.gz trên macOS)
+          find src-tauri/target -path "*/release/bundle/*" \( -name "*.nsis.zip" -o -name "*.app.tar.gz" \) -exec cp {} dist/ \; 2>/dev/null || true
+          find src-tauri/target -path "*/release/bundle/*" \( -name "*.nsis.zip.sig" -o -name "*.app.tar.gz.sig" \) -exec cp {} dist/ \; 2>/dev/null || true
           ls -la dist/
 
       - uses: actions/upload-artifact@v4
@@ -125,3 +132,43 @@ jobs:
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY" 2>/dev/null \
             || gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --title "$TAG" --notes "Automated desktop release $TAG"
           gh release upload "$TAG" dist/* --clobber --repo "$GITHUB_REPOSITORY"
+
+          # Sinh latest.json (manifest auto-updater) sau khi CẢ 2 nền tảng đã upload đủ.
+          # Chạy ở job windows (job cuối theo alphabetical có thể mac trước — dùng phiên bản từ tauri.conf.json).
+          # Đánh dấu bằng file sentinel để chỉ chạy 1 lần: tải release, đủ nsis.zip + app.tar.gz thì sinh.
+
+      - name: Generate latest.json (updater manifest)
+        if: startsWith(github.ref, 'refs/tags/v') && matrix.key == 'windows'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          VERSION="${TAG#v}"
+          # Đợi job macOS upload xong (poll tới 10 phút)
+          for i in $(seq 1 60); do
+            ASSETS=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq '.assets[].name' 2>/dev/null || echo "")
+            if echo "$ASSETS" | grep -q "x64-setup.nsis.zip" && echo "$ASSETS" | grep -q "universal.app.tar.gz"; then
+              break
+            fi
+            sleep 10
+          done
+          WIN_ZIP=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq '.assets[] | select(.name | endswith("x64-setup.nsis.zip")) | .name' | head -1)
+          WIN_SIG=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq '.assets[] | select(.name | endswith("x64-setup.nsis.zip.sig")) | .name' | head -1)
+          MAC_TGZ=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq '.assets[] | select(.name | endswith("universal.app.tar.gz")) | .name' | head -1)
+          MAC_SIG=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq '.assets[] | select(.name | endswith("universal.app.tar.gz.sig")) | .name' | head -1)
+          echo "win=$WIN_ZIP mac=$MAC_TGZ"
+          DL="https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG"
+          cat > latest.json <<EOF
+          {
+            "version": "$VERSION",
+            "notes": "LiveGuard $TAG — xem release notes tại https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG",
+            "pub_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "platforms": {
+              "windows-x86_64": { "signature": "$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG/contents/$WIN_SIG" --jq .content | base64 -d)", "url": "$DL/$WIN_ZIP" },
+              "darwin-x86_64": { "signature": "$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG/contents/$MAC_SIG" --jq .content | base64 -d)", "url": "$DL/$MAC_TGZ" },
+              "darwin-aarch64": { "signature": "$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG/contents/$MAC_SIG" --jq .content | base64 -d)", "url": "$DL/$MAC_TGZ" }
+            }
+          }
+          EOF
+          gh release upload "$TAG" latest.json --clobber --repo "$GITHUB_REPOSITORY"
