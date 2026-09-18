@@ -172,8 +172,10 @@ fn check_for_updates(handle: tauri::AppHandle) {
                         .download_and_install(
                             |chunk, total| {
                                 downloaded += chunk as u64;
-                                if total > 0 && downloaded % (8 * 1024 * 1024) < chunk as u64 {
-                                    println!("[ccc] update... {} / {} MB", downloaded / 1024 / 1024, total / 1024 / 1024);
+                                if let Some(total) = total {
+                                    if total > 0 && downloaded % (8 * 1024 * 1024) < chunk as u64 {
+                                        println!("[ccc] update... {} / {} MB", downloaded / 1024 / 1024, total / 1024 / 1024);
+                                    }
                                 }
                             },
                             || {
