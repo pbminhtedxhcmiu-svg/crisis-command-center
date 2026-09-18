@@ -1,6 +1,6 @@
 [package]
 name = "crisis-command-center"
-version = "1.1.1"
+version = "1.1.2"
 description = "Livestream Crisis Command Center — giám sát & xử lý khủng hoảng livestream"
 authors = ["pbminhtedxhcmiu-svg"]
 edition = "2021"
