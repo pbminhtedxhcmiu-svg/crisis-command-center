@@ -8,12 +8,13 @@ import {
   AlertIcon,
   FileTextIcon,
   ShieldCheckIcon,
+  BookIcon,
 } from "@/components/icons";
 
 export type NavItem = {
   href: string;
   label: string;
-  icon: "home" | "broadcast" | "alert" | "file" | "shield";
+  icon: "home" | "broadcast" | "alert" | "file" | "book" | "shield";
   badge?: boolean;         // dot đỏ (Live Events)
   count?: number;          // badge số đếm (Incidents mở)
 };
@@ -23,6 +24,7 @@ const ICONS = {
   broadcast: BroadcastIcon,
   alert: AlertIcon,
   file: FileTextIcon,
+  book: BookIcon,
   shield: ShieldCheckIcon,
 };
 

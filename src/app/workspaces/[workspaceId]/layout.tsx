@@ -39,6 +39,7 @@ export default async function WorkspaceLayout({
     { href: "live-events", label: "Live Events", icon: "broadcast", badge: true },
     { href: "incidents", label: "Incidents", icon: "alert", count: openIncidents },
     { href: "response-templates", label: "Response Studio", icon: "file" },
+    { href: "playbooks", label: "Playbooks", icon: "book" },
   ];
   if (CAN_VIEW_AUDIT.includes(membership.role)) {
     nav.push({ href: "audit-logs", label: "Audit Logs", icon: "shield" });

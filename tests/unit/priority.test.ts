@@ -21,6 +21,14 @@ describe("computePriority", () => {
     expect(p).toBe("P0");
   });
 
+  it("host_statement base cao hơn product_claim — ngưỡng cảnh báo sớm hơn", () => {
+    // Cùng điều kiện: burst nhỏ 6 bình luận/phút, negative toàn phần → vạ mồm lên P0, claim thường P1
+    const host = computePriority({ riskType: "host_statement", velocity: 6, evidenceCount: 1, sentimentNegativeRatio: 1 });
+    const claim = computePriority({ riskType: "product_claim", velocity: 6, evidenceCount: 1, sentimentNegativeRatio: 1 });
+    expect(host).toBe("P0");
+    expect(claim).toBe("P1");
+  });
+
   it("policy P1 đè priority thấp hơn", () => {
     const p = computePriority({ riskType: "spam", velocity: 1, evidenceCount: 1, sentimentNegativeRatio: 0, policyPriority: "P1" });
     expect(p).toBe("P1");

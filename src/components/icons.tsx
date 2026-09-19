@@ -73,6 +73,16 @@ export function ShieldCheckIcon({ size = 18, className }: IconProps) {
   );
 }
 
+/** Sách mở — Playbooks */
+export function BookIcon({ size = 18, className }: IconProps) {
+  return (
+    <svg {...base(size)} className={className}>
+      <path d="M12 6.5c-1.8-1.6-4.4-2-8-2v13c3.6 0 6.2.4 8 2 1.8-1.6 4.4-2 8-2v-13c-3.6 0-6.2.4-8 2Z" />
+      <path d="M12 6.5v13" />
+    </svg>
+  );
+}
+
 /** Chuông thông báo — topbar */
 export function BellIcon({ size = 19, className }: IconProps) {
   return (

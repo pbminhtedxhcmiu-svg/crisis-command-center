@@ -74,6 +74,40 @@ async function main() {
     },
   });
 
+  // Playbook 'Rủi ro phát ngôn host/KOL' — bài học case O sầu riêng 10/2024:
+  // checklist trước live + từ khóa cảnh báo bơm vào classifier/simulator
+  const hostPb = await prisma.playbook.upsert({
+    where: { id: "pb_host_statement" },
+    update: {},
+    create: {
+      id: "pb_host_statement",
+      workspaceId: workspace.id,
+      name: "Rủi ro phát ngôn host/KOL (vạ mồm)",
+      description: "Phòng và xử lý khủng hoảng do phát ngôn xúc phạm khách/cam kết sai của host hoặc khách mời trong live.",
+      riskKeywords: JSON.stringify([
+        "vạ mồm", "chê khách", "nói xấu khách", "xúc phạm khách", "nghèo mà đòi",
+        "quảng cáo quá sự thật", "cam kết sai", "nói quá", "hứa suông",
+        "host xúc phạm", "thái độ với khách", "quang linh",
+      ]),
+    },
+  });
+  const hostChecklist = [
+    ["Brief phát ngôn trước live: danh sách điều KHÔNG được nói (không chê khách, không cam kết ngoài kịch bản)", "Host + KOL ký nhận trước giờ G"],
+    ["Kiểm tra kịch bản: mọi con số/cam kết sản phẩm phải có hồ sơ kiểm định kèm theo", "Brand Manager xác nhận"],
+    ["Chuẩn bị phản ứng nhanh cho 3 tình huống: khách chê hàng, host nói sai số liệu, KOL nói quá công dụng", "Producer giữ sẵn câu thoại đính chính"],
+    ["Phân công 1 moderator trực luồng theo dõi phát ngôn + comment trích dẫn lời nói của host/KOL", "Không rời ghế trong suốt phiên live"],
+    ["Quay toàn bộ phiên live để làm bằng chứng phản bác/đính chính", "VOD lưu tối thiểu 90 ngày"],
+    ["Chốt kênh xin lỗi/đính chính nếu sự cố xảy ra: template công bố + người duyệt", "Legal duyệt trước khi đăng"],
+  ];
+  for (let i = 0; i < hostChecklist.length; i++) {
+    const [label, detail] = hostChecklist[i];
+    await prisma.playbookChecklistItem.upsert({
+      where: { id: `pbhs_item_${i + 1}` },
+      update: { label, detail, position: i },
+      create: { id: `pbhs_item_${i + 1}`, playbookId: hostPb.id, position: i, label, detail },
+    });
+  }
+
   const event = await prisma.liveEvent.upsert({
     where: { id: "evt_demo_1" },
     update: {},

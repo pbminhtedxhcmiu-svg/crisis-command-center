@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import CrisisEscalationBanner from "./CrisisEscalationBanner";
 
 /* ---------- types (khớp contract GET /stream) ---------- */
 type StreamMsg = {
@@ -26,11 +27,21 @@ type StreamAlert = {
   createdAt: string;
   acknowledgedAt: string | null;
 };
+type ConnectorState = {
+  status: "CONNECTING" | "CONNECTED" | "DISCONNECTED" | "ERROR";
+  platform: string | null;
+  source: string;
+  connectedAt: string | null;
+  lastMessageAt: string | null;
+  ingested: number;
+  error: string | null;
+};
 type StreamPayload = {
   serverTime: string;
   eventStatus: string;
   dataMode: string;
   sim: { running: boolean; paused: boolean; tick: number };
+  connector?: ConnectorState;
   messages: StreamMsg[];
   alerts: StreamAlert[];
   kpi: {
@@ -40,6 +51,7 @@ type StreamPayload = {
     alertsOpen: number;
     alertsByPriority: Record<string, number>;
     openIncidents: number;
+    openP0Incidents?: number;
     slaBreached: number;
     topTopic: string | null;
   };
@@ -100,6 +112,13 @@ export default function CommandCenterMonitor({
   const [paused, setPaused] = useState(false);
   const [busyAlert, setBusyAlert] = useState<string | null>(null);
   const [simBusy, setSimBusy] = useState(false);
+  const [connBusy, setConnBusy] = useState(false);
+  const [connPanel, setConnPanel] = useState(false);
+  const [connPlatform, setConnPlatform] = useState<"tiktok" | "facebook">("tiktok");
+  const [connUsername, setConnUsername] = useState("");
+  const [connVideoId, setConnVideoId] = useState("");
+  const [connToken, setConnToken] = useState("");
+  const [connError, setConnError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [platformFilter, setPlatformFilter] = useState<string | null>(null);
   const [riskOnly, setRiskOnly] = useState(false);
@@ -190,6 +209,35 @@ export default function CommandCenterMonitor({
     }
   }
 
+  async function connectorAction(action: "connect" | "disconnect") {
+    setConnBusy(true);
+    setConnError(null);
+    try {
+      const body: Record<string, unknown> = { action };
+      if (action === "connect") {
+        body.platform = connPlatform;
+        if (connPlatform === "tiktok") body.username = connUsername || undefined;
+        else {
+          body.videoId = connVideoId || undefined;
+          body.accessToken = connToken;
+        }
+      }
+      const res = await fetch(`/api/live-events/${eventId}/connect`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(json?.error?.message ?? json?.error ?? `Lỗi ${res.status}`);
+      if (connPlatform === "facebook" && action === "connect") setConnToken(""); // không giữ token ở client
+      await load();
+    } catch (e) {
+      setConnError(e instanceof Error ? e.message : "Lỗi kết nối");
+    } finally {
+      setConnBusy(false);
+    }
+  }
+
   async function alertAction(alertId: string, action: "acknowledge" | "snooze" | "dismiss" | "create-incident") {
     setBusyAlert(alertId);
     setActionError(null);
@@ -272,12 +320,81 @@ export default function CommandCenterMonitor({
         {sim?.running && !sim.paused && <span className="badge badge-live">RUNNING · tick {sim.tick}</span>}
         {!sim?.running && <span className="badge badge-p3">STOPPED</span>}
         <div className="flex-1" />
+        {eventStatus === "LIVE" && (
+          <button className="btn btn-primary text-[12.5px]" onClick={() => setConnPanel((v) => !v)}>
+            🔌 Nguồn comment thật
+          </button>
+        )}
         <button className="btn btn-ghost text-[12.5px]" onClick={() => setPaused((p) => !p)}>
           {paused ? "⏵ Resume feed" : "⏸ Pause feed"}
         </button>
       </div>
 
+      {/* ===== Connector nguồn comment thật (LIVE mode) ===== */}
+      {connPanel && (
+        <div className="surface p-4 mb-4">
+          <div className="flex items-center gap-3 flex-wrap mb-3">
+            <span className="text-[13.5px] font-bold">🔌 Nguồn comment thật</span>
+            {data?.connector && data.connector.status !== "DISCONNECTED" && (
+              <>
+                <span className={`badge ${data.connector.status === "CONNECTED" ? "badge-live" : data.connector.status === "ERROR" ? "badge-p0" : "badge-demo"}`}>
+                  {data.connector.status}{data.connector.platform ? ` · ${data.connector.platform}` : ""}
+                </span>
+                <span className="text-dim text-[12px]">{data.connector.source} · {data.connector.ingested} comment đã bơm</span>
+                <button className="btn btn-ghost text-[12px]" disabled={connBusy} onClick={() => connectorAction("disconnect")}>
+                  Ngắt kết nối
+                </button>
+              </>
+            )}
+          </div>
+          {(!data?.connector || data.connector.status === "DISCONNECTED" || data.connector.status === "ERROR") && (
+            <div className="space-y-3">
+              <div className="flex gap-2">
+                <button className={`btn text-[12.5px] ${connPlatform === "tiktok" ? "btn-primary" : "btn-ghost"}`} onClick={() => setConnPlatform("tiktok")}>TikTok Live</button>
+                <button className={`btn text-[12.5px] ${connPlatform === "facebook" ? "btn-primary" : "btn-ghost"}`} onClick={() => setConnPlatform("facebook")}>Facebook Live</button>
+              </div>
+              {connPlatform === "tiktok" ? (
+                <label className="field">
+                  <span className="label">Username TikTok (hoặc link live)</span>
+                  <input className="input" value={connUsername} onChange={(e) => setConnUsername(e.target.value)} placeholder="@tenkeng hoặc https://www.tiktok.com/@tenkeng/live" />
+                  <p className="text-faint text-[11.5px] mt-1">Bỏ trống sẽ dùng link đã dán ở Linkstream (tiktok.com/@username/live). Kênh phải đang LIVE.</p>
+                </label>
+              ) : (
+                <>
+                  <label className="field">
+                    <span className="label">Video ID / link live Facebook</span>
+                    <input className="input" value={connVideoId} onChange={(e) => setConnVideoId(e.target.value)} placeholder="https://facebook.com/watch/?v=123456789 hoặc bỏ trống dùng Linkstream" />
+                  </label>
+                  <label className="field">
+                    <span className="label">Page Access Token (không lưu — chỉ dùng phiên này)</span>
+                    <input className="input" type="password" value={connToken} onChange={(e) => setConnToken(e.target.value)} placeholder="EAAG..." />
+                  </label>
+                </>
+              )}
+              <button className="btn btn-primary text-[12.5px]" disabled={connBusy || (connPlatform === "facebook" && !connToken)} onClick={() => connectorAction("connect")}>
+                {connBusy ? "Đang kết nối..." : "Kết nối"}
+              </button>
+            </div>
+          )}
+          {data?.connector?.error && <div className="callout callout-danger mt-3">{data.connector.error}</div>}
+          {connError && <div className="callout callout-danger mt-3">{connError}</div>}
+        </div>
+      )}
+
       {actionError && <div className="callout callout-danger mb-4">{actionError}</div>}
+
+      {/* ===== Cấp độ khủng hoảng + kịch bản real-time (4 mức độ) ===== */}
+      <CrisisEscalationBanner
+        eventStatus={eventStatus}
+        alerts={data?.alerts ?? []}
+        openIncidents={kpi?.openIncidents ?? 0}
+        openP0Incidents={kpi?.openP0Incidents ?? 0}
+        riskMessages5m={
+          (data?.messages ?? []).filter(
+            (m) => m.riskType && m.riskType !== "none" && Date.now() - new Date(m.createdAt).getTime() < 5 * 60_000,
+          ).length
+        }
+      />
 
       <div className="grid lg:grid-cols-[280px_1fr_340px] gap-4">
         {/* ===== cột trái: KPI ===== */}
