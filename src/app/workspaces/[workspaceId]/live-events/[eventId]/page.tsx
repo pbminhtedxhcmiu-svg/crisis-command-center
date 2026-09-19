@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getSessionToken } from "@/lib/auth";
 import EventDetailActions from "./EventDetailActions";
+import LinkstreamEditor from "./LinkstreamEditor";
 
 export const dynamic = "force-dynamic";
 
@@ -108,28 +109,11 @@ export default async function EventDetailPage({
           </p>
         )}
 
-        {platforms.some((p) => streamUrls[p]) && (
-          <div className="mt-3">
-            <div className="text-faint text-[10.5px] font-semibold mb-2">LINKSTREAM</div>
-            <div className="flex gap-2 flex-wrap">
-              {platforms
-                .filter((p) => streamUrls[p])
-                .map((p) => (
-                  <a
-                    key={p}
-                    href={streamUrls[p]}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="btn btn-ghost text-[12px]"
-                    title={streamUrls[p]}
-                  >
-                    <span className={`platform-dot pf-${p}`} style={{ width: 8, height: 8 }} />
-                    Mở {p} ↗
-                  </a>
-                ))}
-            </div>
-          </div>
-        )}
+        <LinkstreamEditor
+          eventId={event.id}
+          platforms={platforms}
+          initialUrls={streamUrls}
+        />
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
           <div className="surface-2 p-3">
