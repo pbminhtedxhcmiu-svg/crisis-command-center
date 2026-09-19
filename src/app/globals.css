@@ -201,10 +201,11 @@ body {
   .sb-ws-sub { display: block; font-size: 11px; color: var(--text-dim); }
   .sb-chevron { color: var(--text-faint); flex-shrink: 0; }
 
+  .sb-nav { margin-top: 4px; }
   .sidebar-link {
     display: flex; align-items: center; gap: 13px;
-    padding: 11px 14px; border-radius: 14px;
-    color: var(--text-dim); font-size: 14.5px; font-weight: 600;
+    padding: 12px 14px; border-radius: 12px;
+    color: var(--text-dim); font-size: 14px; font-weight: 600;
     border: 1px solid transparent; position: relative;
     transition: color 0.15s var(--ease), background 0.15s var(--ease);
   }
@@ -216,18 +217,113 @@ body {
     box-shadow: 0 6px 18px -6px rgba(37, 99, 235, 0.55);
   }
   .sidebar-link.active::before {
-    content: ""; position: absolute; left: -13px; top: 10px; bottom: 10px; width: 4px;
+    content: ""; position: absolute; left: -4px; top: 9px; bottom: 9px; width: 4px;
     border-radius: 999px; background: var(--brand);
   }
-  .sidebar-link.active .sidebar-icon { background: rgba(255, 255, 255, 0.18); }
+  .sb-ico {
+    width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center;
+    background: rgba(30, 45, 74, 0.55); flex-shrink: 0;
+    color: var(--text-dim);
+    transition: color 0.15s var(--ease), background 0.15s var(--ease);
+  }
+  .sidebar-link:hover .sb-ico { color: var(--text); }
+  .sidebar-link.active .sb-ico { background: rgba(255, 255, 255, 0.16); color: #fff; }
   .sb-dot {
     width: 8px; height: 8px; border-radius: 999px; background: #f43f5e; flex-shrink: 0;
     box-shadow: 0 0 8px rgba(244, 63, 94, 0.7);
   }
-  .sidebar-icon {
-    width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center;
-    background: rgba(30, 45, 74, 0.55); font-size: 15px; flex-shrink: 0;
+  .sb-count {
+    min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px;
+    display: grid; place-items: center;
+    background: #f43f5e; color: #fff;
+    font-size: 11px; font-weight: 700; flex-shrink: 0;
   }
+
+  /* ---------- Topbar ---------- */
+  .topbar {
+    display: flex; align-items: center; justify-content: flex-end; gap: 14px;
+    padding: 14px 24px;
+    position: sticky; top: 0; z-index: 20;
+    background: color-mix(in srgb, #0a1120 78%, transparent);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid rgba(148, 163, 184, 0.07);
+  }
+  .topbar-bell {
+    position: relative; width: 38px; height: 38px; border-radius: 10px;
+    display: grid; place-items: center;
+    background: transparent; border: 1px solid transparent;
+    color: var(--text-dim); cursor: pointer;
+    transition: color 0.15s var(--ease), background 0.15s var(--ease);
+  }
+  .topbar-bell:hover { color: var(--text); background: var(--surface-2); }
+  .topbar-bell-dot {
+    position: absolute; top: 8px; right: 9px; width: 8px; height: 8px; border-radius: 999px;
+    background: #f43f5e; border: 2px solid #0a1120;
+  }
+  .topbar-search {
+    display: flex; align-items: center; gap: 9px;
+    width: min(340px, 40vw);
+    padding: 9px 14px; border-radius: 12px;
+    background: rgba(20, 31, 54, 0.55); border: 1px solid var(--border);
+    transition: border-color 0.15s var(--ease);
+  }
+  .topbar-search:focus-within { border-color: var(--border-strong); }
+  .topbar-search-ico { color: var(--text-faint); flex-shrink: 0; }
+  .topbar-search input {
+    background: transparent; border: none; outline: none;
+    color: var(--text); font-size: 13px; width: 100%;
+  }
+  .topbar-search input::placeholder { color: var(--text-faint); }
+
+  /* ---------- Page title 2 màu ---------- */
+  .ov-title {
+    font-size: 26px; font-weight: 800; letter-spacing: -0.4px; color: var(--text);
+  }
+  .ov-title span { color: var(--brand); }
+
+  /* ---------- Event card mới ---------- */
+  .ev-card {
+    display: flex; gap: 16px; align-items: stretch;
+    padding: 14px; border-radius: 14px;
+    background: var(--surface); border: 1px solid var(--border);
+    transition: border-color 0.15s var(--ease), transform 0.15s var(--ease), box-shadow 0.15s var(--ease);
+  }
+  .ev-card:hover {
+    border-color: var(--border-strong);
+    transform: translateY(-1px);
+    box-shadow: 0 10px 28px -12px rgba(0, 0, 0, 0.5);
+  }
+  .ev-thumb {
+    width: 108px; border-radius: 10px; flex-shrink: 0;
+    display: grid; place-items: center; position: relative; overflow: hidden;
+    background:
+      radial-gradient(circle at 30% 25%, rgba(96, 165, 250, 0.5), transparent 55%),
+      radial-gradient(circle at 75% 80%, rgba(37, 99, 235, 0.55), transparent 60%),
+      linear-gradient(140deg, #172441 0%, #101a30 100%);
+  }
+  .ev-thumb-live {
+    background:
+      radial-gradient(circle at 30% 25%, rgba(96, 165, 250, 0.65), transparent 55%),
+      radial-gradient(circle at 75% 80%, rgba(14, 165, 233, 0.5), transparent 60%),
+      linear-gradient(140deg, #1b2c52 0%, #12203c 100%);
+  }
+  .ev-live-tag {
+    position: absolute; top: 8px; left: 8px;
+    padding: 2px 8px; border-radius: 6px;
+    background: #ef4444; color: #fff;
+    font-size: 10px; font-weight: 800; letter-spacing: 0.6px;
+  }
+  .ev-thumb-logo { opacity: 0.85; }
+  .ev-pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 3px 11px; border-radius: 999px;
+    font-size: 11.5px; font-weight: 600;
+  }
+  .ev-pill-dot { width: 6px; height: 6px; border-radius: 999px; background: currentColor; }
+  .ev-pill-live { background: rgba(52, 211, 153, 0.13); color: var(--success); border: 1px solid rgba(52, 211, 153, 0.35); }
+  .ev-pill-soon { background: rgba(251, 191, 36, 0.12); color: #fbbf24; border: 1px solid rgba(251, 191, 36, 0.35); }
+  .ev-pill-ended { background: rgba(100, 116, 139, 0.15); color: #94a3b8; border: 1px solid rgba(100, 116, 139, 0.3); }
+  .ev-kebab { color: var(--text-faint); display: grid; place-items: center; margin-top: auto; }
 
   .sb-user {
     display: flex; align-items: center; gap: 11px;

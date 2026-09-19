@@ -2,16 +2,9 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getSessionToken } from "@/lib/auth";
+import { ClockIcon, KebabIcon } from "@/components/icons";
 
 export const dynamic = "force-dynamic";
-
-const STATUS_BADGE: Record<string, string> = {
-  DRAFT: "badge badge-p3",
-  READY: "badge badge-demo",
-  LIVE: "badge badge-live",
-  ENDED: "badge badge-p3",
-  CANCELLED: "badge badge-disconnected",
-};
 
 const PLATFORM_CLASS: Record<string, string> = {
   facebook: "pf-facebook",
@@ -20,7 +13,19 @@ const PLATFORM_CLASS: Record<string, string> = {
   youtube: "pf-youtube",
 };
 
-export default async function LiveEventsPage({ params }: { params: Promise<{ workspaceId: string }> }) {
+const STATUS_PILL: Record<string, { cls: string; label: string }> = {
+  LIVE: { cls: "ev-pill-live", label: "Đang diễn ra" },
+  DRAFT: { cls: "ev-pill-soon", label: "Sắp diễn ra" },
+  READY: { cls: "ev-pill-soon", label: "Sắp diễn ra" },
+  ENDED: { cls: "ev-pill-ended", label: "Đã kết thúc" },
+  CANCELLED: { cls: "ev-pill-ended", label: "Đã huỷ" },
+};
+
+export default async function LiveEventsPage({
+  params,
+}: {
+  params: Promise<{ workspaceId: string }>;
+}) {
   const { workspaceId } = await params;
   const token = await getSessionToken();
   if (!token) redirect("/login");
@@ -42,13 +47,13 @@ export default async function LiveEventsPage({ params }: { params: Promise<{ wor
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
-      <div className="flex items-center justify-between gap-3 mb-5">
+      <div className="flex items-start justify-between gap-3 mb-6">
         <div>
-          <h1 className="text-xl font-bold tracking-tight">Live Events</h1>
-          <p className="text-dim text-[13px] mt-0.5">
-            {liveCount > 0 ? `${liveCount} sự kiện đang LIVE · ` : ""}
-            {draftCount > 0 ? `${draftCount} chuẩn bị · ` : ""}
-            {events.length} tổng cộng
+          <h1 className="ov-title">
+            Live <span>Events</span>
+          </h1>
+          <p className="text-dim text-[13px] mt-1">
+            {draftCount > 0 ? `${draftCount} chuẩn bị` : "0 chuẩn bị"} · {events.length} tổng cộng
           </p>
         </div>
         <Link className="btn btn-primary" href={`/workspaces/${workspaceId}/live-events/new`}>
@@ -68,43 +73,68 @@ export default async function LiveEventsPage({ params }: { params: Promise<{ wor
           </Link>
         </div>
       ) : (
-        <div className="space-y-2.5">
+        <div className="space-y-3">
           {events.map((e) => {
             const platforms = JSON.parse(e.platforms) as string[];
+            const pill = STATUS_PILL[e.status] ?? { cls: "ev-pill-ended", label: e.status };
+            const desc =
+              e.status === "LIVE"
+                ? `Theo dõi và quản trị rủi ro cho chiến dịch livestream ${e.name}.`
+                : `Chuẩn bị nội dung và kịch bản cho sự kiện livestream ${e.name}.`;
             return (
               <Link
                 key={e.id}
                 href={`/workspaces/${workspaceId}/live-events/${e.id}`}
-                className="surface card-hover block p-4"
+                className="ev-card"
               >
-                <div className="flex items-center justify-between gap-4">
-                  <div className="min-w-0">
-                    <div className="font-semibold text-[15px] truncate mb-1.5">{e.name}</div>
-                    <div className="flex items-center gap-2.5 flex-wrap text-[12px] text-dim">
-                      <span>{e.brand.name}</span>
-                      {e.campaign && <><span className="text-faint">·</span><span>{e.campaign.name}</span></>}
-                      <span className="text-faint">·</span>
-                      <span className="flex items-center gap-1">
-                        {platforms.map((p) => (
-                          <span key={p} className={`platform-dot ${PLATFORM_CLASS[p] ?? "pf-other"}`} title={p} />
-                        ))}
-                      </span>
-                      {e.scheduledAt && (
-                        <>
-                          <span className="text-faint">·</span>
-                          <span>{new Date(e.scheduledAt).toLocaleString("vi-VN", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" })}</span>
-                        </>
-                      )}
-                    </div>
+                <div className={`ev-thumb ${e.status === "LIVE" ? "ev-thumb-live" : ""}`}>
+                  {e.status === "LIVE" && <span className="ev-live-tag">LIVE</span>}
+                  <span className="ev-thumb-logo" aria-hidden>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src="/logo.png" alt="" className="w-7 h-7 opacity-80" />
+                  </span>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2.5 flex-wrap mb-1">
+                    <span className={`ev-pill ${pill.cls}`}>
+                      <span className="ev-pill-dot" />
+                      {pill.label}
+                    </span>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="badge badge-demo">{e.dataMode}</span>
-                    {e.status === "LIVE" ? (
-                      <span className="badge badge-live"><span className="status-dot status-live" style={{ width: 6, height: 6 }} /> LIVE</span>
-                    ) : (
-                      <span className={STATUS_BADGE[e.status] ?? "badge"}>{e.status}</span>
+                  <div className="text-[16px] font-bold truncate">{e.name}</div>
+                  <div className="flex items-center gap-2 flex-wrap text-[12px] text-dim mt-0.5">
+                    <span className="font-medium">{e.brand.name}</span>
+                    <span className="text-faint">·</span>
+                    <span className="flex items-center gap-1">
+                      {platforms.map((p) => (
+                        <span key={p} className={`platform-dot ${PLATFORM_CLASS[p] ?? "pf-other"}`} title={p} />
+                      ))}
+                    </span>
+                    {e.scheduledAt && (
+                      <>
+                        <span className="text-faint">·</span>
+                        <span className="flex items-center gap-1">
+                          <ClockIcon size={13} />
+                          {new Date(e.scheduledAt).toLocaleString("vi-VN", {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            day: "2-digit",
+                            month: "2-digit",
+                          })}
+                        </span>
+                      </>
                     )}
                   </div>
+                  <p className="text-[12.5px] text-dim mt-1.5 truncate">{desc}</p>
+                </div>
+                <div className="flex flex-col items-end gap-2 shrink-0">
+                  <div className="flex items-center gap-2">
+                    <span className="badge badge-demo">{e.dataMode}</span>
+                    <span className={e.status === "LIVE" ? "badge badge-live" : "badge badge-p3"}>{e.status}</span>
+                  </div>
+                  <span className="ev-kebab" aria-hidden>
+                    <KebabIcon size={16} />
+                  </span>
                 </div>
               </Link>
             );
