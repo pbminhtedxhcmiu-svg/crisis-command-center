@@ -162,25 +162,94 @@ body {
   .status-disconnected { background: var(--danger); box-shadow: 0 0 8px rgba(248, 113, 113, 0.6); }
 
   /* ---------- Sidebar ---------- */
+  .sb {
+    width: 300px; flex-shrink: 0;
+    border-right: 1px solid var(--border);
+    background:
+      radial-gradient(ellipse 500px 420px at -60px 88%, rgba(29, 78, 216, 0.22), transparent 60%),
+      radial-gradient(ellipse 400px 380px at 120% -8%, rgba(37, 99, 235, 0.10), transparent 55%),
+      #0b1220;
+    position: relative; overflow: hidden;
+  }
+  .sb::before {
+    /* watermark khiên LiveGuard mờ ở góc dưới trái (như mockup) */
+    content: ""; position: absolute; left: -130px; bottom: 90px; width: 380px; height: 380px;
+    background: url("/logo.png") center / contain no-repeat;
+    opacity: 0.07; pointer-events: none;
+    transform: rotate(-8deg);
+  }
+  .sb-brand {
+    font-size: 21px; font-weight: 800; letter-spacing: -0.4px; color: var(--text);
+  }
+  .sb-brand span { color: var(--brand); }
+  .sb-tagline {
+    font-size: 10.5px; color: var(--text-dim); letter-spacing: 0.3px; margin-top: 1px;
+  }
+  .sb-ws {
+    display: flex; align-items: center; gap: 11px;
+    padding: 10px 12px; border-radius: 12px;
+    background: rgba(20, 31, 54, 0.55); border: 1px solid var(--border);
+    transition: border-color 0.15s var(--ease), background 0.15s var(--ease);
+  }
+  .sb-ws:hover { border-color: var(--border-strong); background: rgba(26, 39, 66, 0.55); }
+  .sb-ws-logo {
+    width: 40px; height: 40px; border-radius: 999px; flex-shrink: 0;
+    display: grid; place-items: center;
+    background: var(--gradient-brand);
+  }
+  .sb-ws-name { display: block; font-size: 14px; font-weight: 700; color: var(--text); line-height: 1.25; }
+  .sb-ws-sub { display: block; font-size: 11px; color: var(--text-dim); }
+  .sb-chevron { color: var(--text-faint); flex-shrink: 0; }
+
   .sidebar-link {
-    display: flex; align-items: center; gap: 10px;
-    padding: 9px 12px; border-radius: var(--radius-sm);
-    color: var(--text-dim); font-size: 13px; font-weight: 570;
+    display: flex; align-items: center; gap: 13px;
+    padding: 11px 14px; border-radius: 14px;
+    color: var(--text-dim); font-size: 14.5px; font-weight: 600;
     border: 1px solid transparent; position: relative;
     transition: color 0.15s var(--ease), background 0.15s var(--ease);
   }
-  .sidebar-link:hover { color: var(--text); background: var(--surface-2); }
+  .sidebar-link:hover { color: var(--text); background: rgba(30, 45, 74, 0.4); }
   .sidebar-link.active {
-    color: var(--text); background: var(--surface-2); border-color: var(--border);
+    color: #fff;
+    background: linear-gradient(90deg, rgba(37, 99, 235, 0.95) 0%, rgba(29, 78, 216, 0.75) 100%);
+    border-color: rgba(96, 165, 250, 0.45);
+    box-shadow: 0 6px 18px -6px rgba(37, 99, 235, 0.55);
   }
   .sidebar-link.active::before {
-    content: ""; position: absolute; left: -1px; top: 8px; bottom: 8px; width: 3px;
-    border-radius: 999px; background: var(--gradient-brand);
+    content: ""; position: absolute; left: -13px; top: 10px; bottom: 10px; width: 4px;
+    border-radius: 999px; background: var(--brand);
+  }
+  .sidebar-link.active .sidebar-icon { background: rgba(255, 255, 255, 0.18); }
+  .sb-dot {
+    width: 8px; height: 8px; border-radius: 999px; background: #f43f5e; flex-shrink: 0;
+    box-shadow: 0 0 8px rgba(244, 63, 94, 0.7);
   }
   .sidebar-icon {
-    width: 26px; height: 26px; border-radius: 7px; display: grid; place-items: center;
-    background: var(--surface-3); font-size: 12.5px; flex-shrink: 0;
+    width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center;
+    background: rgba(30, 45, 74, 0.55); font-size: 15px; flex-shrink: 0;
   }
+
+  .sb-user {
+    display: flex; align-items: center; gap: 11px;
+    padding: 11px 12px; border-radius: 12px;
+    background: rgba(20, 31, 54, 0.55); border: 1px solid var(--border);
+  }
+  .sb-avatar {
+    width: 38px; height: 38px; border-radius: 999px; flex-shrink: 0;
+    display: grid; place-items: center;
+    background: #2563eb; color: #fff;
+    font-size: 13px; font-weight: 800; letter-spacing: 0.3px;
+  }
+  .sb-user-name { display: block; font-size: 13.5px; font-weight: 700; color: var(--text); line-height: 1.25; }
+  .sb-user-role { display: block; font-size: 11px; color: var(--text-dim); }
+  .sb-logout {
+    display: flex; align-items: center; gap: 10px;
+    width: 100%; padding: 10px 14px; border-radius: 10px;
+    color: var(--text-dim); font-size: 13px; font-weight: 600;
+    background: transparent; border: none; cursor: pointer;
+    transition: color 0.15s var(--ease), background 0.15s var(--ease);
+  }
+  .sb-logout:hover { color: var(--text); background: rgba(30, 45, 74, 0.4); }
 
   /* ---------- KPI tiles ---------- */
   .kpi-tile { position: relative; overflow: hidden; }
