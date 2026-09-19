@@ -18,6 +18,7 @@ const RISK_BASE: Record<RiskType, number> = {
   shipping: 2,
   delivery: 3,
   product_claim: 5,
+  host_statement: 6, // phát ngôn host/KOL xúc phạm/cam kết sai — rủi ro niềm tin cao nhất
   volume_spike: 4,
 } as Record<RiskType, number>;
 

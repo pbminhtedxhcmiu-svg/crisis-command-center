@@ -41,6 +41,22 @@ describe("RuleBasedClassifier", () => {
     expect(r.topic).toBe("praise");
     expect(r.sentiment).toBe("positive");
   });
+
+  it("trích phát ngôn 'vạ mồm' của host → host_statement (ưu tiên hơn product_claim)", async () => {
+    const r = await cls.classify({ externalId: "7", platform: "facebook", rawText: "Host vừa chê khách 'nghèo mà đòi xịn' là sao vậy shop?", authorName: "G" });
+    expect(r.riskType).toBe("host_statement");
+    expect(r.sentiment).toBe("negative");
+  });
+
+  it("'cam kết sai' → host_statement, không rơi vào product_claim", async () => {
+    const r = await cls.classify({ externalId: "8", platform: "tiktok", rawText: "Anh ấy cam kết sai sự thật trong live rồi", authorName: "H" });
+    expect(r.riskType).toBe("host_statement");
+  });
+
+  it("hỏi kiểm định thông thường vẫn là product_claim", async () => {
+    const r = await cls.classify({ externalId: "9", platform: "shopee", rawText: "Sản phẩm có kiểm định Bộ Y tế chưa ạ?", authorName: "I" });
+    expect(r.riskType).toBe("product_claim");
+  });
 });
 
 describe("dedupeKey", () => {

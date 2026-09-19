@@ -67,6 +67,18 @@ function buildScript(category: string, productHint: string): Scene[] {
     { fromTick: 5, toTick: 9, texts: ["Đặt 2 tuần rồi chưa nhận được hàng", "Đơn của tôi giao trễ quá lâu rồi", "Hàng giao sai mẫu, cần đổi trả gấp", "Shipper giao trễ, không ai trả lời", "Chưa nhận được hàng mà đơn đã closed", "Giao trễ 10 ngày rồi, khi nào có hàng?", "Đơn thất lạc rồi shop ơi, xử lý giúp em", "Trả hàng rồi mà chưa được hoàn tiền"] },
     // 4) Nghi ngờ claim sản phẩm — risk cao, sinh theo ngành hàng
     claimSceneFor(category, productHint),
+    // 4b) Trích phát ngôn 'vạ mồm' của host/KOL — khủng hoảng niềm tin (case O sầu riêng 10/2024)
+    {
+      fromTick: 10,
+      toTick: 13,
+      texts: [
+        "Host vừa chê khách 'nghèo mà đòi xịn' là sao vậy shop?",
+        "Anh Quang Linh cam kết 'không quả nào xấu' là quảng cáo quá sự thật rồi",
+        "Ai quay lại đoạn host xúc phạm khách chưa, up lên xem nào",
+        "Thái độ với khách khiếu nại như vậy thì bỏ luôn shop",
+        "Nói quá quá mức như trong live là lừa dối người mua đó",
+      ],
+    },
     // 5) Spam/duplicate (dedupe)
     { fromTick: 11, toTick: 14, texts: ["Kiếm tiền online click link ngay: http://bit.ly/zzz", "Kiếm tiền online click link ngay: http://bit.ly/zzz", "Kiếm tiền online click link ngay: http://bit.ly/zzz"] },
     // 6) Topic bình thường nhưng volume cao → volume_spike
@@ -88,18 +100,22 @@ function textsForTick(tick: number, script: Scene[]): string[] {
   return out.slice(0, SIM_MESSAGES_PER_TICK);
 }
 
-async function ingestMessage(opts: {
+// Ingest 1 message vào pipeline phân loại + signal — DÙNG CHUNG cho simulator & connector thật.
+// externalId phải unique trong event (đã có @@unique(eventId, externalId)) — connector dùng id gốc
+// của nền tảng, simulator dùng sim-<tick>-<rand>.
+export async function ingestLiveMessage(opts: {
   eventId: string;
-  tick: number;
+  externalId: string;
   text: string;
   platform: Platform;
   author: string;
   category: string;
-  rand: () => number;
+  likes?: number;
+  simTick?: number;
 }) {
-  const { eventId, tick, text, platform, author, category, rand } = opts;
+  const { eventId, externalId, text, platform, author, category, likes = 0, simTick = 0 } = opts;
   const cls = await classifier.classify({
-    externalId: `sim-${tick}-${rand().toString(36).slice(2, 8)}`,
+    externalId,
     platform,
     rawText: text,
     authorName: author,
@@ -112,7 +128,7 @@ async function ingestMessage(opts: {
   const msg = await prisma.message.create({
     data: {
       eventId,
-      externalId: `sim-${tick}-${rand().toString(36).slice(2, 8)}`,
+      externalId,
       platform,
       authorName: author,
       rawText: text,
@@ -120,8 +136,8 @@ async function ingestMessage(opts: {
       riskType: cls.riskType,
       sentiment: cls.sentiment,
       dedupeKey: dkey,
-      simTick: tick,
-      engagement: JSON.stringify({ likes: Math.floor(rand() * 20), replies: 0, shares: 0 }),
+      simTick,
+      engagement: JSON.stringify({ likes, replies: 0, shares: 0 }),
     },
   });
 
@@ -235,9 +251,26 @@ async function runTick(eventId: string) {
   for (const text of texts) {
     const platform = PLATFORMS_POOL[Math.floor(rand() * PLATFORMS_POOL.length)];
     const author = authorFor(rand);
-    await ingestMessage({ eventId, tick, text, platform, author, category, rand });
+    await ingestLiveMessage({
+      eventId,
+      externalId: `sim-${tick}-${rand().toString(36).slice(2, 8)}`,
+      text,
+      platform,
+      author,
+      category,
+      likes: Math.floor(rand() * 20),
+      simTick: tick,
+    });
   }
 
+  await runAlertRules(eventId, event.workspaceId);
+
+  await prisma.liveEvent.update({ where: { id: eventId }, data: { simTick: tick } });
+}
+
+// Alert rules dùng chung: delivery burst, claim doubt, vạ mồm, spam, volume spike.
+// Connector thật gọi sau mỗi lần ingest (throttle trong connector); simulator gọi mỗi tick.
+export async function runAlertRules(eventId: string, workspaceId: string) {
   // Velocity theo risk từ DB (messages 2 phút gần nhất)
   const since = new Date(Date.now() - 2 * 60_000);
   const recent = await prisma.message.groupBy({
@@ -254,7 +287,7 @@ async function runTick(eventId: string) {
   if (deliveryRecent >= 3) {
     await maybeAlert({
       eventId,
-      workspaceId: event.workspaceId,
+      workspaceId,
       risk: "delivery",
       recentCount: deliveryRecent,
       velocity: Math.round(deliveryRecent / 2),
@@ -267,7 +300,7 @@ async function runTick(eventId: string) {
   if (claimRecent >= 2) {
     await maybeAlert({
       eventId,
-      workspaceId: event.workspaceId,
+      workspaceId,
       risk: "product_claim",
       recentCount: claimRecent,
       velocity: claimRecent,
@@ -276,11 +309,26 @@ async function runTick(eventId: string) {
       reason: `${claimRecent} câu hỏi/nghi ngờ về chứng nhận & cam kết sản phẩm`,
     });
   }
+  // Phát ngôn host/KOL ('vạ mồm'): người xem trích lời xúc phạm/cam kết sai — ngưỡng thấp
+  // vì 1–2 bình luận lan truyền đã đủ gây khủng hoảng niềm tin (bài học case O sầu riêng 10/2024).
+  const hostRecent = countRisk("host_statement");
+  if (hostRecent >= 1) {
+    await maybeAlert({
+      eventId,
+      workspaceId,
+      risk: "host_statement",
+      recentCount: hostRecent,
+      velocity: hostRecent,
+      negativeRatio: 1,
+      title: "Phát ngôn host/KOL gây tranh cãi (vạ mồm)",
+      reason: `${hostRecent} bình luận trích dẫn/lên án phát ngôn của host hoặc khách mời trong live`,
+    });
+  }
   const spamRecent = countRisk("spam");
   if (spamRecent >= 3) {
     await maybeAlert({
       eventId,
-      workspaceId: event.workspaceId,
+      workspaceId,
       risk: "spam",
       recentCount: spamRecent,
       velocity: spamRecent,
@@ -294,7 +342,7 @@ async function runTick(eventId: string) {
     if (normal >= 10) {
       await maybeAlert({
         eventId,
-        workspaceId: event.workspaceId,
+        workspaceId,
         risk: "volume_spike",
         recentCount: totalRecent,
         velocity: Math.round(totalRecent / 2),
@@ -304,8 +352,6 @@ async function runTick(eventId: string) {
       });
     }
   }
-
-  await prisma.liveEvent.update({ where: { id: eventId }, data: { simTick: tick } });
 }
 
 export async function startSimulator(eventId: string) {

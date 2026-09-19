@@ -48,6 +48,30 @@ const DEFAULT_RULES: Rule[] = [
     sentiment: "negative",
   },
   {
+    // Rủi ro phát ngôn host/KOL ('vạ mồm'): người xem trích dẫn/lên án lời nói xúc phạm,
+    // cam kết sai sự thật, quảng cáo quá sự thật của người bán trong live.
+    // Đứng TRƯỚC product_claim vì từ khóa đặc thù hơn ('cam kết sai' chứa 'cam kết').
+    topic: "product_claim",
+    riskType: "host_statement",
+    keywords: [
+      "quảng cáo quá sự thật",
+      "nói xấu khách",
+      "chê khách",
+      "xúc phạm khách",
+      "vạ mồm",
+      "miệng méo",
+      "nghèo mà đòi",
+      "cam kết sai",
+      "nói sai",
+      "hứa suông",
+      "nói quá",
+      "host xúc phạm",
+      "quang linh",
+      "thái độ với khách",
+    ],
+    sentiment: "negative",
+  },
+  {
     topic: "product_claim",
     riskType: "product_claim",
     keywords: ["thật không", "lừa đảo", "fake", "hàng giả", "chứng nhận", "kiểm định", "cam kết", "haram"],
@@ -74,10 +98,11 @@ export class RuleBasedClassifier implements SignalClassifier {
     // Ngành hàng của event — mặc định "other" nếu caller không truyền (backward compatible)
     const meta = categoryMeta(input.category);
     const text = input.rawText.toLowerCase();
-    // Thứ tự ưu tiên: claim > delivery > spam > shipping > pricing > praise
+    // Thứ tự ưu tiên: host_statement > claim > delivery > spam > shipping > pricing > praise
+    // claimDoubts theo ngành CHỈ merge vào rule product_claim (riskType) — không merge vào host_statement
     for (const rule of this.rules) {
       const keywords =
-        rule.topic === "product_claim" ? [...rule.keywords, ...meta.claimDoubts] : rule.keywords;
+        rule.riskType === "product_claim" ? [...rule.keywords, ...meta.claimDoubts] : rule.keywords;
       if (keywords.some((k) => text.includes(k))) {
         return {
           topic: rule.topic,

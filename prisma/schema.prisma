@@ -144,6 +144,8 @@ model LiveEvent {
   simState         String    @default("STOPPED") @map("sim_state") // STOPPED|RUNNING|PAUSED
   simTick          Int       @default(0) @map("sim_tick")
   simSeed          Int       @default(42) @map("sim_seed")
+  // Checklist trước live áp từ playbook: JSON map index→true (đã đọc/ghim)
+  checklistState   String    @default("{}") @map("checklist_state")
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @updatedAt @map("updated_at")
 
@@ -374,16 +376,35 @@ model IncidentTimeline {
 }
 
 // ============ RESPONSE STUDIO ============
+// Checklist item tĩnh của playbook (đọc-ghim trước giờ live).
+// Tiến độ hoàn thành theo từng event nằm ở LiveEvent.checklistState (map itemId→true).
+model PlaybookChecklistItem {
+  id          String   @id @default(cuid())
+  playbookId  String   @map("playbook_id")
+  position    Int
+  label       String
+  detail      String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  playbook Playbook @relation(fields: [playbookId], references: [id], onDelete: Cascade)
+
+  @@index([playbookId, position])
+  @@map("playbook_checklist_items")
+}
+
 model Playbook {
   id          String   @id @default(cuid())
   workspaceId String   @map("workspace_id")
   name        String
   description String?
+  // Từ khóa cảnh báo phát ngôn host/KOL trong bình luận: JSON string[] → classifier + alert
+  riskKeywords String  @default("[]") @map("risk_keywords")
   createdAt   DateTime @default(now()) @map("created_at")
 
   workspace  Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   liveEvents LiveEvent[]
   templates  ResponseTemplate[]
+  checklist  PlaybookChecklistItem[]
 
   @@map("playbooks")
 }

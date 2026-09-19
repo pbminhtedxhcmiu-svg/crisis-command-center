@@ -3,6 +3,7 @@ import { requirePermission } from "@/lib/auth";
 import { notFound } from "@/lib/errors";
 import { ok, fail } from "@/lib/http";
 import { getSimulatorState } from "@/lib/crisis/simulator";
+import { getConnectorState } from "@/lib/crisis/connector";
 import { severityDistribution } from "@/lib/crisis/metrics";
 
 // GET /api/live-events/:id/stream?sinceIso=
@@ -60,6 +61,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ eventId:
     const openIncidents = await prisma.incident.count({
       where: { eventId, status: { in: ["OPEN", "INVESTIGATING", "RESPONSE_PENDING", "RESPONDING", "MONITORING"] } },
     });
+    // Incident P0 đang mở → tín hiệu Severe cho escalation banner (alert P0 đã CONVERTED
+    // thành incident thì priority nằm ở incident — banner phải nhìn thấy cả hai)
+    const openP0Incidents = await prisma.incident.count({
+      where: { eventId, severity: "P0", status: { in: ["OPEN", "INVESTIGATING", "RESPONSE_PENDING", "RESPONDING"] } },
+    });
 
     const messages = rawMessages.map((m) => ({
       id: m.id,
@@ -98,6 +104,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ eventId:
       event: { id: event.id, status: event.status, dataMode: event.dataMode },
       eventStatus: event.status,
       sim: { running: simState.state === "RUNNING", paused: simState.state === "PAUSED", tick: simState.tick },
+      connector: getConnectorState(eventId),
       dataMode: simAlive ? event.dataMode : "DISCONNECTED",
       messages,
       alerts,
@@ -108,6 +115,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ eventId:
         alertsOpen: alertsByPriority.P0 + alertsByPriority.P1 + alertsByPriority.P2 + alertsByPriority.P3,
         alertsByPriority,
         openIncidents,
+        openP0Incidents,
         slaBreached,
         topTopic: topTopicRows[0]?.topic ?? null,
       },

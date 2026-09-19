@@ -50,10 +50,14 @@ export const RISK_TYPES = [
   "shipping",
   "delivery",
   "product_claim",
+  "host_statement",
   "spam",
   "volume_spike",
 ] as const;
 export type RiskType = (typeof RISK_TYPES)[number];
+
+// Rủi ro phát ngôn host/KOL — label + hướng dẫn hiển thị ở alert/command center
+export const HOST_STATEMENT_LABEL = "Phát ngôn host/KOL";
 
 export const ALERT_STATUSES = ["OPEN", "ACKNOWLEDGED", "SNOOZED", "CONVERTED", "DISMISSED"] as const;
 export type AlertStatus = (typeof ALERT_STATUSES)[number];

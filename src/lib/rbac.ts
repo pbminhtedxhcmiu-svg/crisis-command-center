@@ -30,6 +30,7 @@ export type PermissionAction =
   | "note.add"
   | "template.view"
   | "template.manage"
+  | "playbook.manage"
   | "draft.create"
   | "draft.requestApproval"
   | "response.approve"
@@ -62,6 +63,7 @@ const ALL_ACTIONS: PermissionAction[] = [
   "note.add",
   "template.view",
   "template.manage",
+  "playbook.manage",
   "draft.create",
   "draft.requestApproval",
   "response.approve",
@@ -93,6 +95,7 @@ export const PERMISSIONS: Record<WorkspaceRole, PermissionAction[]> = {
     "note.add",
     "template.view",
     "template.manage",
+    "playbook.manage",
     "draft.create",
     "draft.requestApproval",
     "response.approve",
@@ -103,6 +106,7 @@ export const PERMISSIONS: Record<WorkspaceRole, PermissionAction[]> = {
     "workspace.view",
     "brand.manage",
     "campaign.manage",
+    "playbook.manage",
     "event.view",
     "event.create",
     "event.update",

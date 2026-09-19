@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { getSessionToken } from "@/lib/auth";
 import EventDetailActions from "./EventDetailActions";
 import LinkstreamEditor from "./LinkstreamEditor";
+import PreLiveChecklist from "./PreLiveChecklist";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +29,7 @@ export default async function EventDetailPage({
     include: {
       brand: true,
       campaign: true,
-      playbook: true,
+      playbook: { include: { checklist: { orderBy: { position: "asc" as const } } } },
       _count: { select: { messages: true, alerts: true, incidents: true } },
     },
   });
@@ -49,11 +50,16 @@ export default async function EventDetailPage({
     products = [];
   }
 
+  const checklistState = JSON.parse(event.checklistState ?? "{}") as Record<string, boolean>;
+  const playbookChecklist = event.playbook?.checklist ?? [];
+  const checkedCount = playbookChecklist.filter((c) => checklistState[c.id]).length;
+
   const readiness = [
     { ok: !!(event.hostUserId || event.producerUserId), label: "Người chịu trách nhiệm" },
     { ok: platforms.length > 0, label: "Nguồn dữ liệu / demo source" },
     { ok: riskKeywords.length > 0, label: "Risk keywords" },
     { ok: !!event.playbook, label: "Playbook" },
+    { ok: playbookChecklist.length === 0 || checkedCount === playbookChecklist.length, label: "Checklist trước live" },
   ];
   const readyCount = readiness.filter((r) => r.ok).length;
 
@@ -139,6 +145,15 @@ export default async function EventDetailPage({
         </div>
       </div>
 
+      {event.playbook && playbookChecklist.length > 0 && (
+        <PreLiveChecklist
+          eventId={event.id}
+          playbookName={event.playbook.name}
+          items={playbookChecklist.map((c) => ({ id: c.id, label: c.label, detail: c.detail }))}
+          initialState={checklistState}
+        />
+      )}
+
       <div className="grid md:grid-cols-2 gap-4">
         <div className="surface card-hover p-5">
           <h2 className="text-[14px] font-bold mb-3 flex items-center justify-between">
@@ -176,6 +191,9 @@ export default async function EventDetailPage({
               <div className="text-[13px] font-semibold">{event.playbook.name}</div>
               {event.playbook.description && (
                 <div className="text-[12px] text-dim mt-0.5">{event.playbook.description}</div>
+              )}
+              {playbookChecklist.length > 0 && (
+                <div className="text-faint text-[11.5px] mt-1.5">{playbookChecklist.length} mục checklist — tick ở panel bên trái</div>
               )}
             </div>
           )}
