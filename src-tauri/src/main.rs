@@ -127,6 +127,7 @@ fn start_server(app: &tauri::AppHandle) -> Result<u16, String> {
         .env("HOSTNAME", "127.0.0.1")
         .env("NODE_ENV", "production")
         .env("DATABASE_URL", &db_url)
+        .env("APP_VERSION", app.package_info().version.to_string())
         .spawn()
         .map_err(|e| format!("không khởi động được node sidecar: {e}"))?;
 
