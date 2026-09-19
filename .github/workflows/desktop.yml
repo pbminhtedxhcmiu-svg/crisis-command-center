@@ -159,8 +159,8 @@ jobs:
           gh release edit "$TAG" --draft=false --repo "$GITHUB_REPOSITORY" || true
           WIN_ZIP=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq '.assets[] | select(.name | endswith("x64-setup.exe")) | .name' | head -1)
           WIN_SIG=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq '.assets[] | select(.name | endswith("x64-setup.exe.sig")) | .name' | head -1)
-          MAC_TGZ=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq '.assets[] | select(.name | endswith("universal.app.tar.gz")) | .name' | head -1)
-          MAC_SIG=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq '.assets[] | select(.name | endswith("universal.app.tar.gz.sig")) | .name' | head -1)
+          MAC_TGZ=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq '.assets[] | select(.name | endswith(".app.tar.gz")) | .name' | head -1)
+          MAC_SIG=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq '.assets[] | select(.name | endswith(".app.tar.gz.sig")) | .name' | head -1)
           test -n "$WIN_ZIP" && test -n "$WIN_SIG" && test -n "$MAC_TGZ" && test -n "$MAC_SIG"
           echo "win=$WIN_ZIP mac=$MAC_TGZ"
           DL="https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG"
