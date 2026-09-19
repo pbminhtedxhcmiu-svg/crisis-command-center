@@ -111,9 +111,12 @@ jobs:
         run: |
           mkdir -p dist
           find src-tauri/target -path "*/release/bundle/*" \( -name "*.msi" -o -name "*.exe" -o -name "*.dmg" \) -exec cp {} dist/ \; 2>/dev/null || true
-          # Bản cập nhật có chữ ký cho auto-updater (NSIS trên Win, .app.tar.gz trên macOS)
-          find src-tauri/target -path "*/release/bundle/*" \( -name "*.nsis.zip" -o -name "*.app.tar.gz" \) -exec cp {} dist/ \; 2>/dev/null || true
-          find src-tauri/target -path "*/release/bundle/*" \( -name "*.nsis.zip.sig" -o -name "*.app.tar.gz.sig" \) -exec cp {} dist/ \; 2>/dev/null || true
+          # Bản cập nhật có chữ ký cho auto-updater (Tauri v2):
+          #   NSIS  -> <setup>.exe       + <setup>.exe.sig
+          #   macOS -> <name>.app.tar.gz + <name>.app.tar.gz.sig
+          find src-tauri/target -path "*/release/bundle/*" -name "*.exe.sig" -exec cp {} dist/ \; 2>/dev/null || true
+          find src-tauri/target -path "*/release/bundle/*" -name "*.msi.sig" -exec cp {} dist/ \; 2>/dev/null || true
+          find src-tauri/target -path "*/release/bundle/*" \( -name "*.app.tar.gz" -o -name "*.app.tar.gz.sig" \) -exec cp {} dist/ \; 2>/dev/null || true
           ls -la dist/
 
       - uses: actions/upload-artifact@v4
@@ -154,24 +157,30 @@ jobs:
           VERSION="${TAG#v}"
           # Release phải published (không draft) thì endpoint theo tag mới thấy
           gh release edit "$TAG" --draft=false --repo "$GITHUB_REPOSITORY" || true
-          WIN_ZIP=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq '.assets[] | select(.name | endswith("x64-setup.nsis.zip")) | .name' | head -1)
-          WIN_SIG=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq '.assets[] | select(.name | endswith("x64-setup.nsis.zip.sig")) | .name' | head -1)
+          WIN_ZIP=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq '.assets[] | select(.name | endswith("x64-setup.exe")) | .name' | head -1)
+          WIN_SIG=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq '.assets[] | select(.name | endswith("x64-setup.exe.sig")) | .name' | head -1)
           MAC_TGZ=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq '.assets[] | select(.name | endswith("universal.app.tar.gz")) | .name' | head -1)
           MAC_SIG=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq '.assets[] | select(.name | endswith("universal.app.tar.gz.sig")) | .name' | head -1)
           test -n "$WIN_ZIP" && test -n "$WIN_SIG" && test -n "$MAC_TGZ" && test -n "$MAC_SIG"
           echo "win=$WIN_ZIP mac=$MAC_TGZ"
           DL="https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG"
-          cat > latest.json <<EOF
-          {
-            "version": "$VERSION",
-            "notes": "LiveGuard $TAG — xem release notes tại https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG",
-            "pub_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-            "platforms": {
-              "windows-x86_64": { "signature": "$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG/contents/$WIN_SIG" --jq .content | base64 -d)", "url": "$DL/$WIN_ZIP" },
-              "darwin-x86_64": { "signature": "$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG/contents/$MAC_SIG" --jq .content | base64 -d)", "url": "$DL/$MAC_TGZ" },
-              "darwin-aarch64": { "signature": "$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG/contents/$MAC_SIG" --jq .content | base64 -d)", "url": "$DL/$MAC_TGZ" }
-            }
-          }
-          EOF
-          node -e "JSON.parse(require('fs').readFileSync('latest.json','utf8')); console.log('latest.json valid JSON')"
+          # Tải sig qua browser_download_url (Contents API KHÔNG đọc được release asset)
+          curl -fsSL "$DL/$WIN_SIG" -o win.sig
+          curl -fsSL "$DL/$MAC_SIG" -o mac.sig
+          test -s win.sig && test -s mac.sig
+          node -e "
+            const fs = require('fs');
+            const manifest = {
+              version: process.argv[1],
+              notes: 'LiveGuard ' + process.argv[2] + ' — xem release notes tại https://github.com/' + process.argv[3] + '/releases/tag/' + process.argv[2],
+              pub_date: new Date().toISOString().replace(/\\.\\d+Z$/, 'Z'),
+              platforms: {
+                'windows-x86_64': { signature: fs.readFileSync('win.sig', 'utf8'), url: process.argv[4] },
+                'darwin-x86_64':  { signature: fs.readFileSync('mac.sig', 'utf8'), url: process.argv[5] },
+                'darwin-aarch64': { signature: fs.readFileSync('mac.sig', 'utf8'), url: process.argv[5] },
+              },
+            };
+            fs.writeFileSync('latest.json', JSON.stringify(manifest, null, 2));
+          " "$VERSION" "$TAG" "$GITHUB_REPOSITORY" "$DL/$WIN_ZIP" "$DL/$MAC_TGZ"
+          node -e "const j=JSON.parse(require('fs').readFileSync('latest.json','utf8')); const ok=Object.values(j.platforms).every(p=>p.signature.length>100 && p.url.startsWith('https://')); if(!ok){console.error('latest.json không hợp lệ');process.exit(1)} console.log('latest.json OK — platforms:',Object.keys(j.platforms).join(', '))"
           gh release upload "$TAG" latest.json --clobber --repo "$GITHUB_REPOSITORY"
