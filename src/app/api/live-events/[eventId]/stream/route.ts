@@ -3,6 +3,7 @@ import { requirePermission } from "@/lib/auth";
 import { notFound } from "@/lib/errors";
 import { ok, fail } from "@/lib/http";
 import { getSimulatorState } from "@/lib/crisis/simulator";
+import { currentPhase, type ScenarioId } from "@/lib/crisis/scenario";
 import { getConnectorState } from "@/lib/crisis/connector";
 import { severityDistribution } from "@/lib/crisis/metrics";
 
@@ -103,7 +104,13 @@ export async function GET(req: Request, { params }: { params: Promise<{ eventId:
       serverTime: new Date().toISOString(),
       event: { id: event.id, status: event.status, dataMode: event.dataMode },
       eventStatus: event.status,
-      sim: { running: simState.state === "RUNNING", paused: simState.state === "PAUSED", tick: simState.tick },
+      sim: {
+        running: simState.state === "RUNNING",
+        paused: simState.state === "PAUSED",
+        tick: simState.tick,
+        scenario: simState.scenario,
+        phase: currentPhase(simState.tick, (simState.scenario ?? "o_sau_rieng") as ScenarioId),
+      },
       connector: getConnectorState(eventId),
       dataMode: simAlive ? event.dataMode : "DISCONNECTED",
       messages,

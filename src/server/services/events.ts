@@ -38,6 +38,7 @@ export async function simulatorControl(
   ctx: AuthContext,
   eventId: string,
   action: "start" | "pause" | "resume" | "stop",
+  opts?: { scenario?: string; restart?: boolean },
 ) {
   assertCanAct(ctx, "event.simulator");
   const event = await prisma.liveEvent.findUnique({ where: { id: eventId } });
@@ -49,10 +50,14 @@ export async function simulatorControl(
     action: `event.simulator.${action}`,
     entityType: "live_event",
     entityId: eventId,
+    detail: opts?.scenario ? { scenario: opts.scenario, restart: opts.restart ?? false } : undefined,
   });
   switch (action) {
     case "start":
-      return startSimulator(eventId);
+      return startSimulator(eventId, {
+        scenario: opts?.scenario as Parameters<typeof startSimulator>[1] extends { scenario?: infer S } ? S : never,
+        restart: opts?.restart,
+      });
     case "pause":
       return pauseSimulator(eventId);
     case "resume":

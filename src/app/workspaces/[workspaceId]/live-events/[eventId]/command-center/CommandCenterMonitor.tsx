@@ -36,11 +36,12 @@ type ConnectorState = {
   ingested: number;
   error: string | null;
 };
+type StreamPhase = { fromTick: number; toTick: number; label: string; hint: string };
 type StreamPayload = {
   serverTime: string;
   eventStatus: string;
   dataMode: string;
-  sim: { running: boolean; paused: boolean; tick: number };
+  sim: { running: boolean; paused: boolean; tick: number; scenario?: string | null; phase?: StreamPhase | null };
   connector?: ConnectorState;
   messages: StreamMsg[];
   alerts: StreamAlert[];
@@ -125,6 +126,9 @@ export default function CommandCenterMonitor({
   const [query, setQuery] = useState("");
   const [panelAlert, setPanelAlert] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
+  // Kịch bản demo cố định (scripted) — thay cho demo ngẫu nhiên
+  const [simScenario, setSimScenario] = useState<"o_sau_rieng" | "crisis_live" | "classic_mix">("o_sau_rieng");
+  const [simRestart, setSimRestart] = useState(true);
 
   const pausedRef = useRef(false);
   pausedRef.current = paused;
@@ -195,7 +199,10 @@ export default function CommandCenterMonitor({
       const res = await fetch(`/api/live-events/${eventId}/simulator`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action }),
+        body: JSON.stringify({
+          action,
+          ...(action === "start" ? { scenario: simScenario, restart: simRestart } : {}),
+        }),
       });
       if (!res.ok) {
         const b = await res.json().catch(() => null);
@@ -303,6 +310,24 @@ export default function CommandCenterMonitor({
 
       {/* ===== sim controls ===== */}
       <div className="surface p-3 mb-4 flex items-center gap-2 flex-wrap">
+        <select
+          className="input text-[12.5px]"
+          style={{ width: "auto", minWidth: 200 }}
+          value={simScenario}
+          onChange={(e) => setSimScenario(e.target.value as typeof simScenario)}
+          disabled={simBusy}
+          title="Kịch bản demo cố định — mỗi tick cho ra đúng cùng bình luận"
+        >
+          <option value="o_sau_rieng">🎬 Case O sầu riêng (10/2024)</option>
+          <option value="crisis_live">🔥 Phiên live đang khủng hoảng</option>
+          <option value="classic_mix">🔀 Trộn nhiều loại rủi ro</option>
+        </select>
+        {!sim?.running && (
+          <label className="flex items-center gap-1.5 text-[12px] text-dim" title="Chạy kịch bản từ tick 0 thay vì tiếp tục">
+            <input type="checkbox" checked={simRestart} onChange={(e) => setSimRestart(e.target.checked)} />
+            Chạy lại từ đầu
+          </label>
+        )}
         {!sim?.running ? (
           <button className="btn btn-primary text-[12.5px]" disabled={simBusy} onClick={() => simAction("start")}>
             ▶ Start demo stream
@@ -318,6 +343,11 @@ export default function CommandCenterMonitor({
         )}
         {sim?.running && sim.paused && <span className="badge badge-p3">PAUSED</span>}
         {sim?.running && !sim.paused && <span className="badge badge-live">RUNNING · tick {sim.tick}</span>}
+        {sim?.running && sim.phase && (
+          <span className="badge badge-demo" title={sim.phase.hint}>
+            {sim.phase.label} <span className="text-faint">· {sim.phase.hint}</span>
+          </span>
+        )}
         {!sim?.running && <span className="badge badge-p3">STOPPED</span>}
         <div className="flex-1" />
         {eventStatus === "LIVE" && (

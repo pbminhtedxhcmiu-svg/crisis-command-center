@@ -144,6 +144,8 @@ model LiveEvent {
   simState         String    @default("STOPPED") @map("sim_state") // STOPPED|RUNNING|PAUSED
   simTick          Int       @default(0) @map("sim_tick")
   simSeed          Int       @default(42) @map("sim_seed")
+  // Kịch bản demo cố định (scripted): o_sau_rieng | crisis_live | classic_mix
+  simScenario      String    @default("o_sau_rieng") @map("sim_scenario")
   // Checklist trước live áp từ playbook: JSON map index→true (đã đọc/ghim)
   checklistState   String    @default("{}") @map("checklist_state")
   createdAt        DateTime  @default(now()) @map("created_at")

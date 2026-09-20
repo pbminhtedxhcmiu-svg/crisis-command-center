@@ -1,11 +1,13 @@
 import { prisma } from "@/lib/db";
-import { SIM_MAX_LIFETIME_TICKS, SIM_MESSAGES_PER_TICK, SIM_TICK_MS } from "@/lib/constants";
-import type { Platform, Priority, RiskType } from "@/lib/constants";
+import { SIM_MAX_LIFETIME_TICKS, SIM_TICK_MS } from "@/lib/constants";
+import type { Priority, RiskType } from "@/lib/constants";
 import { RuleBasedClassifier, dedupeKey } from "@/lib/crisis/classifier";
 import { computePriority } from "@/lib/crisis/priority";
-import { categoryMeta } from "@/lib/crisis/categories";
+import { SCENARIOS, currentPhase, messagesForTick, type ScenarioId } from "@/lib/crisis/scenario";
 
-// DemoStreamSimulator — sinh message theo kịch bản seed cố định (ổn định cho test).
+// DemoStreamSimulator — chạy kịch bản demo CỐ ĐỊNH (scripted) tái hiện case
+// thật (mặc định: O sầu riêng 10/2024). KHÔNG còn ngẫu nhiên: cùng tick → cùng
+// message, cùng tác giả — demo đọc như câu chuyện có mở đầu-cao trào-kết.
 // CHỈ chạy in-process; restart server → timer mất, DB simState được đối chiếu lại (reconcile).
 // TODO(connector): thay bằng connector nền tảng thật, giữ nguyên interface start/pause/resume/stop.
 
@@ -16,98 +18,14 @@ const registry: Map<string, SimRuntime> = (g.__simRegistry ??= new Map());
 
 const classifier = new RuleBasedClassifier();
 
-// ---- Seeded PRNG (mulberry32) — seed cố định => kịch bản lặp lại được ----
-function mulberry32(seed: number) {
-  let a = seed >>> 0;
-  return () => {
-    a |= 0;
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-const FIRST_NAMES = ["Minh", "Lan", "Hùng", "Thảo", "Nam", "Oanh", "Dũng", "Ngọc", "Tuấn", "Mai", "Long", "Hà"];
-const PLATFORMS_POOL: Platform[] = ["facebook", "tiktok", "shopee"];
-
-function authorFor(rand: () => number) {
-  const name = FIRST_NAMES[Math.floor(rand() * FIRST_NAMES.length)];
-  return `${name} ${String.fromCharCode(65 + Math.floor(rand() * 26))}.`;
-}
-
-// ---- Kịch bản: mỗi tick sinh messages theo "scene" (đã nén để burst sớm) ----
-type Scene = { fromTick: number; toTick: number; texts: string[] };
-
-// Scene 4 (nghi vấn claim) sinh động theo ngành hàng của event — phục vụ nhiều mặt hàng.
-function claimSceneFor(category: string, productHint: string): Scene {
-  const meta = categoryMeta(category);
-  const [b1, b2] = [meta.claimBenefits[0] ?? "cam kết đặc biệt", meta.claimBenefits[1] ?? "cam kết chất lượng"];
-  return {
-    fromTick: 8,
-    toTick: 12,
-    texts: [
-      `${productHint} có chứng nhận kiểm định không vậy?`,
-      `Nghe nói ${productHint} bị ${meta.claimDoubts[0] ?? "không rõ nguồn gốc"}, thật không?`,
-      "Hàng giả nhiều lắm, làm sao phân biệt?",
-      `Quảng cáo ${b1} là lừa đảo không?`,
-      `Có ai kiểm định chứng nhận ${meta.authority} chưa ạ?`,
-      `Bạn nào dùng thấy ${b2} chưa? Tôi nghi lắm.`,
-    ],
-  };
-}
-
-function buildScript(category: string, productHint: string): Scene[] {
-  return [
-    // 1) Comment hỏi giá (normal)
-    { fromTick: 1, toTick: 4, texts: ["Sản phẩm này giá bao nhiêu ạ?", `Cho em hỏi giá ${productHint} với ạ`, "Giá tiền bao nhiêu vậy shop?", "Có phí ship không ạ?"] },
-    // 2) Hỏi vận chuyển (normal)
-    { fromTick: 3, toTick: 6, texts: ["Order khi nào nhận được ạ?", "Cho hỏi vận chuyển Hà Nội bao lâu?", "Phí ship về tỉnh bao nhiêu ạ?", "Ship về Đà Nẵng mấy ngày ạ?"] },
-    // 3) Burst complaint giao hàng → ALERT sớm (tick 5)
-    { fromTick: 5, toTick: 9, texts: ["Đặt 2 tuần rồi chưa nhận được hàng", "Đơn của tôi giao trễ quá lâu rồi", "Hàng giao sai mẫu, cần đổi trả gấp", "Shipper giao trễ, không ai trả lời", "Chưa nhận được hàng mà đơn đã closed", "Giao trễ 10 ngày rồi, khi nào có hàng?", "Đơn thất lạc rồi shop ơi, xử lý giúp em", "Trả hàng rồi mà chưa được hoàn tiền"] },
-    // 4) Nghi ngờ claim sản phẩm — risk cao, sinh theo ngành hàng
-    claimSceneFor(category, productHint),
-    // 4b) Trích phát ngôn 'vạ mồm' của host/KOL — khủng hoảng niềm tin (case O sầu riêng 10/2024)
-    {
-      fromTick: 10,
-      toTick: 13,
-      texts: [
-        "Host vừa chê khách 'nghèo mà đòi xịn' là sao vậy shop?",
-        "Anh Quang Linh cam kết 'không quả nào xấu' là quảng cáo quá sự thật rồi",
-        "Ai quay lại đoạn host xúc phạm khách chưa, up lên xem nào",
-        "Thái độ với khách khiếu nại như vậy thì bỏ luôn shop",
-        "Nói quá quá mức như trong live là lừa dối người mua đó",
-      ],
-    },
-    // 5) Spam/duplicate (dedupe)
-    { fromTick: 11, toTick: 14, texts: ["Kiếm tiền online click link ngay: http://bit.ly/zzz", "Kiếm tiền online click link ngay: http://bit.ly/zzz", "Kiếm tiền online click link ngay: http://bit.ly/zzz"] },
-    // 6) Topic bình thường nhưng volume cao → volume_spike
-    { fromTick: 14, toTick: 20, texts: ["Đẹp quá shop ơi", `Sản phẩm dùng tốt thật sự ạ`, "Yêu shop, ủng hộ chủ shop", "Chất lượng tuyệt vời, đã mua lần 3", "Đẹp quá, chốt đơn ngay", "Hay quá, cho em 1 đơn", "Tuyệt vời, cho em xin mã giảm giá", "Ủng hộ shop nhiều nhé", "Good too good, love this", "Mai còn live không shop?", `Đơn ${productHint} chạy ok lắm mọi người ơi`, "Da em cải thiện rõ sau 2 tuần"] },
-  ];
-}
-
-function textsForTick(tick: number, script: Scene[]): string[] {
-  const scenes = script.filter((s) => tick >= s.fromTick && tick <= s.toTick);
-  const out: string[] = [];
-  for (const s of scenes) {
-    out.push(s.texts[(tick + out.length) % s.texts.length]);
-  }
-  // nền: message "other" thường lệ để feed không trống
-  const AMBIENT = ["Live hôm nay nhiều deal quá ạ", "Xin mã giảm giá với ạ", "Cho em xem lại phần demo sản phẩm"];
-  while (out.length < SIM_MESSAGES_PER_TICK) {
-    out.push(AMBIENT[(tick + out.length) % AMBIENT.length]);
-  }
-  return out.slice(0, SIM_MESSAGES_PER_TICK);
-}
-
 // Ingest 1 message vào pipeline phân loại + signal — DÙNG CHUNG cho simulator & connector thật.
 // externalId phải unique trong event (đã có @@unique(eventId, externalId)) — connector dùng id gốc
-// của nền tảng, simulator dùng sim-<tick>-<rand>.
+// của nền tảng, simulator dùng sim-<tick>-<idx>.
 export async function ingestLiveMessage(opts: {
   eventId: string;
   externalId: string;
   text: string;
-  platform: Platform;
+  platform: string;
   author: string;
   category: string;
   likes?: number;
@@ -116,12 +34,12 @@ export async function ingestLiveMessage(opts: {
   const { eventId, externalId, text, platform, author, category, likes = 0, simTick = 0 } = opts;
   const cls = await classifier.classify({
     externalId,
-    platform,
+    platform: platform as Parameters<typeof classifier.classify>[0]["platform"],
     rawText: text,
     authorName: author,
     category,
   });
-  const dkey = dedupeKey(platform, text, author);
+  const dkey = dedupeKey(platform as Parameters<typeof dedupeKey>[0], text, author);
   const dupe = await prisma.message.findFirst({ where: { eventId, dedupeKey: dkey } });
   if (dupe) return { dupe: true as const, cls };
 
@@ -239,26 +157,23 @@ async function runTick(eventId: string) {
     return;
   }
 
-  const seed = event.simSeed;
-  const rand = mulberry32(seed * 7919 + tick);
-  // Ngành hàng của event → kịch bản demo + từ khoá claim đặc thù ngành
+  // Kịch bản demo cố định: category/productHint lấy từ kịch bản (fallback theo sản phẩm event)
+  const scenarioId = (event.simScenario as ScenarioId) in SCENARIOS ? (event.simScenario as ScenarioId) : "o_sau_rieng";
+  const meta = SCENARIOS[scenarioId];
   const products = safeParseProducts(event.products);
-  const category = products[0]?.category ?? "other";
-  const productHint = (products[0]?.name ?? "sản phẩm").toLowerCase();
-  const script = buildScript(category, productHint);
-  const texts = textsForTick(tick, script);
+  const category = products[0]?.category ?? meta.category;
+  const productHint = (products[0]?.name ?? meta.productHint).toLowerCase();
 
-  for (const text of texts) {
-    const platform = PLATFORMS_POOL[Math.floor(rand() * PLATFORMS_POOL.length)];
-    const author = authorFor(rand);
+  const msgs = messagesForTick(tick, scenarioId, productHint);
+  for (const [i, m] of msgs.entries()) {
     await ingestLiveMessage({
       eventId,
-      externalId: `sim-${tick}-${rand().toString(36).slice(2, 8)}`,
-      text,
-      platform,
-      author,
+      externalId: `sim-${tick}-${i}`,
+      text: m.text,
+      platform: m.platform,
+      author: m.author,
       category,
-      likes: Math.floor(rand() * 20),
+      likes: (tick * 7 + i * 3) % 25, // likes tất định theo tick (không random)
       simTick: tick,
     });
   }
@@ -354,18 +269,27 @@ export async function runAlertRules(eventId: string, workspaceId: string) {
   }
 }
 
-export async function startSimulator(eventId: string) {
+export async function startSimulator(eventId: string, opts?: { scenario?: ScenarioId; restart?: boolean }) {
   const event = await prisma.liveEvent.findUnique({ where: { id: eventId } });
   if (!event) throw new Error("Event not found");
   if (event.status !== "LIVE") throw new Error("Event chưa LIVE — hãy Start event trước");
   await stopSimulator(eventId);
-  const rt: SimRuntime = { timer: null, tick: 0, startedAt: Date.now() };
+  // Chọn kịch bản: opts > đang lưu trong event > mặc định (o_sau_rieng)
+  const scenarioId =
+    opts?.scenario && opts.scenario in SCENARIOS
+      ? opts.scenario
+      : event.simScenario && event.simScenario in SCENARIOS
+        ? (event.simScenario as ScenarioId)
+        : "o_sau_rieng";
+  const restart = opts?.restart ?? false;
+  const startTick = restart ? 0 : event.simTick;
+  const rt: SimRuntime = { timer: null, tick: startTick, startedAt: Date.now() };
   registry.set(eventId, rt);
   rt.timer = setInterval(() => {
     void runTick(eventId).catch((e) => console.error("[simulator] tick failed:", e));
   }, SIM_TICK_MS);
-  await prisma.liveEvent.update({ where: { id: eventId }, data: { simState: "RUNNING" } });
-  return { state: "RUNNING" as const };
+  await prisma.liveEvent.update({ where: { id: eventId }, data: { simState: "RUNNING", simScenario: scenarioId, simTick: startTick } });
+  return { state: "RUNNING" as const, scenario: scenarioId };
 }
 
 export async function pauseSimulator(eventId: string) {
@@ -402,18 +326,25 @@ export async function stopSimulator(eventId: string) {
 export async function getSimulatorState(eventId: string) {
   const event = await prisma.liveEvent.findUnique({
     where: { id: eventId },
-    select: { simState: true, simTick: true, dataMode: true, status: true },
+    select: { simState: true, simTick: true, dataMode: true, status: true, simScenario: true },
   });
   if (!event) throw new Error("Event not found");
   const alive = registry.get(eventId)?.timer != null;
   if (event.simState === "RUNNING" && !alive) {
     await prisma.liveEvent.update({ where: { id: eventId }, data: { simState: "PAUSED" } });
-    return { state: "PAUSED" as const, tick: event.simTick, dataMode: event.dataMode, recovered: true };
+    return {
+      state: "PAUSED" as const,
+      tick: event.simTick,
+      dataMode: event.dataMode,
+      scenario: event.simScenario,
+      recovered: true,
+    };
   }
   return {
     state: event.simState as "RUNNING" | "PAUSED" | "STOPPED",
     tick: event.simTick,
     dataMode: event.dataMode,
+    scenario: event.simScenario,
     recovered: false,
   };
 }
@@ -430,3 +361,5 @@ function safeParseProducts(json: string | null): Array<{ name?: string; category
     return [];
   }
 }
+
+export { currentPhase };
