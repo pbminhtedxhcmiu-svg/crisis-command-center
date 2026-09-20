@@ -14,6 +14,13 @@ fn server_port() -> u16 {
         .unwrap_or(34_561)
 }
 
+/// Process sidecar node đang chạy (server Next). Lưu lại để kill gọn khi app
+/// thoát — nếu sidecar mồ côi sống sót sau khi app đóng, nó giữ lock file
+/// (prisma query engine .node) khiến auto-updater không thay được file
+/// (NSIS treo ở "Error opening file for writing").
+static SIDECAR_CHILD: std::sync::Mutex<Option<tauri_plugin_shell::process::CommandChild>> =
+    std::sync::Mutex::new(None);
+
 /// Chuẩn hoá đường dẫn thành SQLite URL (forward slash, encode khoảng trắng).
 fn sqlite_url(path: &std::path::Path) -> String {
     let s = path.to_string_lossy().replace('\\', "/").replace(' ', "%20");
@@ -131,8 +138,12 @@ fn start_server(app: &tauri::AppHandle) -> Result<u16, String> {
         .spawn()
         .map_err(|e| format!("không khởi động được node sidecar: {e}"))?;
 
-    // Giữ process sống suốt vòng đời app (drop CommandChild sẽ kill process)
-    std::mem::forget(child);
+    // Giữ process sống suốt vòng đời app — nhưng giữ handle lại để kill đúng
+    // lúc app thoát. (mem::forget sẽ để sidecar mồ côi sống sót, giữ lock file
+    // khiến installer của bản update kế tiếp không ghi được file.)
+    if let Ok(mut guard) = SIDECAR_CHILD.lock() {
+        *guard = Some(child);
+    }
 
     // Ghi log server ra console của app (chỉ ở bản debug)
     if cfg!(debug_assertions) {
@@ -157,6 +168,17 @@ fn start_server(app: &tauri::AppHandle) -> Result<u16, String> {
         std::thread::sleep(Duration::from_millis(500));
     }
     Err(format!("server không mở cổng {port} sau 40 giây"))
+}
+
+/// Kill sidecar node khi app thoát (RunEvent::Exit) để không còn process nào
+/// giữ lock file trong thư mục cài đặt sau khi app đóng.
+fn kill_sidecar() {
+    if let Ok(mut guard) = SIDECAR_CHILD.lock() {
+        if let Some(child) = guard.take() {
+            println!("[ccc] dừng server sidecar...");
+            let _ = child.kill();
+        }
+    }
 }
 
 /// Kiểm tra bản cập nhật qua plugin updater (endpoint latest.json trên GitHub Releases).
@@ -229,6 +251,11 @@ fn main() {
             });
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("lỗi khi chạy ứng dụng Tauri");
+        .build(tauri::generate_context!())
+        .expect("lỗi khi chạy ứng dụng Tauri")
+        .run(|_app, event| {
+            if let tauri::RunEvent::Exit = event {
+                kill_sidecar();
+            }
+        });
 }
