@@ -174,7 +174,7 @@ fn start_server(app: &tauri::AppHandle) -> Result<u16, String> {
 /// giữ lock file trong thư mục cài đặt sau khi app đóng.
 fn kill_sidecar() {
     if let Ok(mut guard) = SIDECAR_CHILD.lock() {
-        if let Some(child) = guard.take() {
+        if let Some(mut child) = guard.take() {
             println!("[ccc] dừng server sidecar...");
             let _ = child.kill();
         }
