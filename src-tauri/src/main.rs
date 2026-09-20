@@ -98,6 +98,50 @@ fn run_migrations(app: &tauri::AppHandle, app_dir: &std::path::Path, db_url: &st
     })
 }
 
+/// Chạy prisma/seed.mjs sau migrate (demo workspace + playbooks + templates).
+/// Upsert idempotent — chạy mỗi lần mở app, non-fatal: seed lỗi không chặn app.
+fn run_seed(app: &tauri::AppHandle, app_dir: &std::path::Path, db_url: &str) {
+    let seed_path = app_dir.join("prisma").join("seed.mjs");
+    if !seed_path.exists() {
+        println!("[ccc] seed.mjs không có trong bundle — bỏ qua seed");
+        return;
+    }
+    let spawned = node_command(app)
+        .and_then(|cmd| {
+            cmd.args(["prisma/seed.mjs"])
+                .current_dir(app_dir)
+                .env("DATABASE_URL", db_url)
+                .env("NODE_ENV", "production")
+                .spawn()
+                .map_err(|e| format!("không chạy được seed: {e}"))
+        });
+    let (mut rx, _child) = match spawned {
+        Ok(pair) => pair,
+        Err(e) => {
+            eprintln!("[ccc] seed bỏ qua: {e}");
+            return;
+        }
+    };
+    let result = tauri::async_runtime::block_on(async move {
+        let mut log = String::new();
+        let mut exit_code: Option<i32> = None;
+        while let Some(event) = rx.recv().await {
+            match event {
+                CommandEvent::Stdout(line) => log.push_str(&String::from_utf8_lossy(&line)),
+                CommandEvent::Stderr(line) => log.push_str(&String::from_utf8_lossy(&line)),
+                CommandEvent::Terminated(status) => exit_code = Some(status.code.unwrap_or(-1)),
+                _ => {}
+            }
+        }
+        (exit_code, log)
+    });
+    match result {
+        (Some(0), _) => println!("[ccc] seed OK (demo data + playbooks sẵn sàng)"),
+        (Some(code), log) => eprintln!("[ccc] seed kết thúc exit {code}:\n{log}"),
+        (None, log) => eprintln!("[ccc] seed kết thúc bất thường:\n{log}"),
+    }
+}
+
 /// Khởi động Next standalone server bằng node sidecar và chờ cổng mở.
 /// Trả về port của server khi sẵn sàng.
 fn start_server(app: &tauri::AppHandle) -> Result<u16, String> {
@@ -124,6 +168,9 @@ fn start_server(app: &tauri::AppHandle) -> Result<u16, String> {
 
     // 1. Migrate DB trước khi server mở cổng
     run_migrations(app, &app_dir, &db_url)?;
+
+    // 1b. Seed demo data + playbooks (idempotent, non-fatal)
+    run_seed(app, &app_dir, &db_url);
 
     // 2. Chạy Next standalone server
     let port = server_port();

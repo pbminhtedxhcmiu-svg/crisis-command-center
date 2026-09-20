@@ -74,7 +74,12 @@ const DEFAULT_RULES: Rule[] = [
   {
     topic: "product_claim",
     riskType: "product_claim",
-    keywords: ["thật không", "lừa đảo", "fake", "hàng giả", "chứng nhận", "kiểm định", "cam kết", "haram"],
+    // Tố cáo hàng giả/hàng nhái — cốt lõi playbook pb_counterfeit (ngưỡng burst thấp
+    // vì bằng chứng vật lý trong tay khách → lan truyền nhanh hơn mọi crisis khác)
+    keywords: [
+      "thật không", "lừa đảo", "fake", "hàng giả", "chứng nhận", "kiểm định", "cam kết", "haram",
+      "hàng nhái", "tem giả", "khác hình", "xâm phạm thương hiệu", "giả mạo", "hàng fake", "không chính hãng",
+    ],
     sentiment: "negative",
   },
   {

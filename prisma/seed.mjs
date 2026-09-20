@@ -108,6 +108,93 @@ async function main() {
     });
   }
 
+  // Playbook 'Hàng giả / Hàng nhái / Xâm phạm thương hiệu' — tổng hợp từ case
+  // Biti's Hunter, Nike/Adidas counterfeit VN, Tân Hiệp Phát, FoodMap, QLTT 2024–2026.
+  // 3 Track: A (hàng thật bị hiểu nhầm) · B (hàng giả xác nhận) · C (cơ quan chức năng vào cuộc).
+  const counterfeitPb = await prisma.playbook.upsert({
+    where: { id: "pb_counterfeit" },
+    update: {},
+    create: {
+      id: "pb_counterfeit",
+      workspaceId: workspace.id,
+      name: "Hàng giả / Hàng nhái / Xâm phạm thương hiệu",
+      description:
+        "Phòng và xử lý khủng hoảng hàng giả trong livestream: immediate action protocol 5 phút đầu, Track A (hàng thật bị nghi oan), Track B (hàng giả xác nhận — hoàn tiền 100%), Track C (QLTT/Công an vào cuộc). Nguồn: case Biti's Hunter, FoodMap 07/2024, QLTT enforcement 2024–2026.",
+      riskKeywords: JSON.stringify([
+        "hàng giả", "hàng nhái", "hàng fake", "fake", "tem giả", "khác hình",
+        "xâm phạm thương hiệu", "giả mạo", "lừa đảo", "không chính hãng", "hàng dựng",
+      ]),
+    },
+  });
+  const counterfeitChecklist = [
+    ["Hồ sơ IP Documentation sẵn sàng cho mọi SKU: CO/CQ, hóa đơn VAT (không chỉ biên nhận), hợp đồng đại lý/authorization letter từ brand gốc", "Brand Manager — rà soát trước mỗi phiên có SKU mới"],
+    ["QC kiểm physical product ngay trước giờ live — quy tắc 1 người QC độc lập, không bỏ qua dù quen mặt hàng", "QC Lead — chụp ảnh lô hàng làm bằng chứng gốc"],
+    ["Chuẩn bị sẵn ảnh so sánh hàng thật vs hàng nhái + serial/hologram chuẩn để đăng khi bị tố cáo", "PR Lead — upload kho nội bộ, kiểm tra link còn sống"],
+    ["Keyword alert 'hàng giả/fake/nhái/tem giả/khác hình' — SLA phản hồi 30 phút, 24/7", "MOD team — 3+ comment cùng chủ đề/10 phút = alert Brand Manager ngay"],
+    ["Chốt 1 spokesperson duy nhất + cả team thuộc lòng 3 câu KHÔNG được nói khi bị tố cáo hàng giả", "CEO — ký nhận trước giờ live"],
+    ["Contact card điền sẵn: luật sư SHTT/thương mại (retainer), hotline QLTT 1800 888 655, TikTok Shop Brand Support", "CEO — in giấy dán tại phòng live"],
+    ["Crisis drill hàng tháng: diễn tập 'khách tố hàng giả trong live' + 'QLTT gõ cửa'", "CRT — ghi nhận kết quả + thời gian phản ứng"],
+  ];
+  for (let i = 0; i < counterfeitChecklist.length; i++) {
+    const [label, detail] = counterfeitChecklist[i];
+    await prisma.playbookChecklistItem.upsert({
+      where: { id: `pbct_item_${i + 1}` },
+      update: { label, detail, position: i },
+      create: { id: `pbct_item_${i + 1}`, playbookId: counterfeitPb.id, position: i, label, detail },
+    });
+  }
+  // 4 template phát ngôn theo Track của playbook (đều cần Legal duyệt — rủi ro pháp lý)
+  const counterfeitTemplates = [
+    {
+      id: "tpl_ct_track_a", name: "Track A — Hàng thật bị hiểu nhầm (chứng minh bằng bằng chứng)",
+      kind: "comment_reply", channel: "comment", tone: "empathetic",
+      body: "Chúng tôi ghi nhận và trân trọng phản ánh của bạn {customer_name}. Chúng tôi vừa hoàn thành kiểm tra độc lập sản phẩm. Kết quả: sản phẩm là hàng chính hãng {brand_name}, nhập từ {source}, hóa đơn VAT {vat_number}. Công khai toàn bộ hồ sơ: {proof_link}. Nếu bạn chưa yên tâm, chúng tôi cam kết đổi trả 100% trong 7 ngày, không cần giải thích.",
+      vars: ["customer_name", "brand_name", "source", "vat_number", "proof_link"],
+      banned: ["chúng tôi không bao giờ bán hàng giả", "không phải lỗi của chúng tôi"],
+    },
+    {
+      id: "tpl_ct_track_b1", name: "Track B — Phát ngôn 1: Thừa nhận đang điều tra (< 2 giờ)",
+      kind: "host_notice", channel: "social_post", tone: "empathetic",
+      body: "{brand_name} xác nhận đang tiến hành điều tra khẩn sau phản ánh về chất lượng sản phẩm {product_name}. Toàn bộ đơn hàng lô {batch_number} đã được tạm dừng giao. Khách hàng có đơn liên quan vui lòng liên hệ {hotline} — chúng tôi cam kết xử lý trong 24 giờ. Cập nhật tiếp theo: {next_update_time}.",
+      vars: ["brand_name", "product_name", "batch_number", "hotline", "next_update_time"],
+      banned: ["bằng chứng này là giả mạo", "khách hàng cố tình bôi nhọ"],
+    },
+    {
+      id: "tpl_ct_track_b2", name: "Track B — Phát ngôn 2: Kết quả điều tra + hoàn tiền 100% (< 6 giờ)",
+      kind: "host_notice", channel: "press_release", tone: "empathetic",
+      body: "Sau điều tra độc lập, chúng tôi xác nhận lô {batch_number} có {defect_count} sản phẩm không đáp ứng tiêu chuẩn chính hãng. Chúng tôi xin lỗi toàn bộ {affected_orders} khách hàng bị ảnh hưởng. Hành động ngay: (1) Hoàn tiền 100% trong 48 giờ, không điều kiện. (2) Nhà cung cấp đã bị chấm dứt hợp đồng. (3) Sản phẩm còn lại được tiêu hủy có xác nhận của cơ quan chức năng. Chúng tôi chịu hoàn toàn trách nhiệm vì đây là hàng chúng tôi đã bán đến tay bạn.",
+      vars: ["batch_number", "defect_count", "affected_orders"],
+      banned: ["đổ lỗi cho nhà cung cấp trước mặt công chúng", "một số khách hàng hiểu lầm"],
+    },
+    {
+      id: "tpl_ct_track_c", name: "Track C — Phát ngôn DUY NHẤT khi cơ quan chức năng vào cuộc",
+      kind: "internal_notice", channel: "press_release", tone: "formal",
+      body: "{brand_name} xác nhận đang hợp tác đầy đủ với cơ quan chức năng trong quá trình điều tra. Chúng tôi cam kết minh bạch và tuân thủ pháp luật. Mọi thông tin chi tiết sẽ được công bố sau khi có kết luận chính thức. (KHÔNG nói thêm gì — lặp lại nguyên văn với mọi câu hỏi của báo chí. Chỉ spokesperson được chỉ định mới được phát ngôn.)",
+      vars: ["brand_name"],
+      banned: ["tiết lộ thông tin điều tra", "phản công kích báo chí", "phát ngôn khi chưa có clearance luật sư"],
+    },
+  ];
+  for (const t of counterfeitTemplates) {
+    await prisma.responseTemplate.upsert({
+      where: { id: t.id },
+      update: {},
+      create: {
+        id: t.id,
+        workspaceId: workspace.id,
+        playbookId: counterfeitPb.id,
+        name: t.name,
+        kind: t.kind,
+        situationTopic: "product_claim",
+        channel: t.channel,
+        tone: t.tone,
+        body: t.body,
+        variables: JSON.stringify(t.vars),
+        bannedClaims: JSON.stringify(t.banned),
+        approverRole: "LEGAL_REVIEWER",
+      },
+    });
+  }
+
   const event = await prisma.liveEvent.upsert({
     where: { id: "evt_demo_1" },
     update: {},

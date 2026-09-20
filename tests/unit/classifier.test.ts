@@ -72,6 +72,25 @@ describe("dedupeKey", () => {
   });
 });
 
+describe("tố cáo hàng giả / hàng nhái (playbook pb_counterfeit)", () => {
+  const classifier = new RuleBasedClassifier();
+  const classify = (text: string) =>
+    classifier.classify({ externalId: "t", platform: "tiktok", rawText: text, authorName: "a", category: "fashion" });
+
+  it("nhận diện tố cáo hàng nhái / tem giả / khác hình → product_claim", async () => {
+    for (const text of [
+      "Nhận hàng nhái tem giả, khác hình hoàn toàn",
+      "Shop bán hàng fake xâm phạm thương hiệu rồi",
+      "Sản phẩm giả mạo, không chính hãng",
+      "Đây là hàng fake nhé mọi người",
+    ]) {
+      const cls = await classify(text);
+      expect(cls.riskType).toBe("product_claim");
+      expect(cls.sentiment).toBe("negative");
+    }
+  });
+});
+
 describe("topicGroupKey", () => {
   it("cùng bucket thời gian → cùng key", () => {
     const a = topicGroupKey("evt", "delivery", 60_000, new Date("2026-01-01T10:00:30Z"));
